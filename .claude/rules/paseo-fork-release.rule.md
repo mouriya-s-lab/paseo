@@ -19,6 +19,13 @@ alwaysApply: true
 - 未经用户明确授权，不创建 release commit、tag，不发布 npm 或部署构建产物。
 - 只改文档、网站、测试配置或 workflow 的提交不自动进入 runtime release；是否部署由对应 workflow 和用户明确的发布意图决定。
 
+## Fork 代码放置
+
+- Fork-only 实现和测试默认放在仓库根目录 `fork-features/<feature>/`，不要把 fork 分支或 fork-only 逻辑塞进上游模块的 `if`/`switch`。
+- 修改上游文件前先寻找 `register*`、handler、provider 或 callback 扩展点；有扩展点就从 `fork-features/` 注册。
+- 没有扩展点时，只保留使 fork 模块进入执行路径的最小接入改动，并在首次产生 trunk patch 时创建 `fork-features/trunk-patches.md`，记录文件/符号、缺失的 seam、无法抽出的原因和验证方式。
+- 每次上游同步都重新检查这些接入点；上游提供原生实现或注册 seam 后，迁移到 `fork-features/` 或删除过时 patch。
+
 ## 边界
 
 - Fork 定制的放置规则归全局 `fork-customization-placement` rule；发布细节归 `docs/release.md` 与 release skill。本 rule 只补充 Paseo fork 的入口/出口边界，不复制它们的内容。
