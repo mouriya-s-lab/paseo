@@ -1,6 +1,6 @@
-# Paseo Docker Image
+# Paseo Fork Docker Image
 
-This directory contains the official Paseo daemon image.
+This directory contains the Paseo fork daemon image.
 
 The image runs the daemon headless and serves the bundled web UI from the same
 HTTP origin. Start it, then open the daemon URL in a browser.
@@ -11,7 +11,7 @@ docker run -d --name paseo \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
-  ghcr.io/getpaseo/paseo:latest
+  ghcr.io/mouriya-s-lab/paseo:latest
 ```
 
 Then open `http://localhost:6767`.
@@ -20,7 +20,7 @@ The base image intentionally does not bundle agent CLIs. Extend it with the
 agents you use:
 
 ```Dockerfile
-FROM ghcr.io/getpaseo/paseo:latest
+FROM ghcr.io/mouriya-s-lab/paseo:latest
 
 USER root
 RUN npm install -g @openai/codex @anthropic-ai/claude-code

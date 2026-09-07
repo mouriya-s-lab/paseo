@@ -14,6 +14,7 @@ import {
   upsertHostConnectionInProfiles,
   registryHasConnection,
   StoredHostRegistrySchema,
+  type DirectTcpHostConnection,
   type HostConnection,
   type HostProfile,
 } from "@/types/host-connection";
@@ -80,12 +81,28 @@ import { projectIconCache } from "@/projects/icon-cache";
 import { nativePerformanceTrace } from "@/performance/native-trace";
 import { revokePushNotifications } from "@/push-notifications";
 import { createAppWebSocketFactory } from "./websocket-factory";
+import {
+  buildSelfHostedConnection,
+  fetchSelfHostedManifest,
+  isSelfHostedBuildEnabled,
+  isSelfHostedConnectionId,
+  readSelfHostedBrowserTarget,
+  readSelfHostedLocalDaemonOverride,
+  reconcileSelfHostedHostProfiles,
+  type SelfHostedManifestEntry,
+} from "@/fork-features/self-hosted/runtime";
 
 export type HostRuntimeConnectionStatus = "idle" | "connecting" | "online" | "offline" | "error";
 export type HostRegistryStatus = "loading" | "ready";
 
 export type ActiveConnection =
-  | { type: "directTcp"; endpoint: string; display: string }
+  | {
+      type: "directTcp";
+      endpoint: string;
+      display: string;
+      basePath?: string;
+      useTls?: boolean;
+    }
   | { type: "directSocket"; endpoint: string; display: "socket" }
   | { type: "directPipe"; endpoint: string; display: "pipe" }
   | { type: "remoteSsh"; endpoint: string; display: string }
@@ -203,6 +220,7 @@ const PROBE_INACTIVE_WHILE_ONLINE_MS = 120_000;
 const ADAPTIVE_SWITCH_THRESHOLD_MS = 40;
 const ADAPTIVE_SWITCH_CONSECUTIVE_PROBES = 3;
 const CONFIGURED_OVERRIDE_BOOTSTRAP_RETRY_MS = 1_000;
+const SELF_HOSTED_DISCOVERY_RETRY_MS = 10_000;
 
 function toActiveConnection(connection: HostConnection): ActiveConnection {
   if (connection.type === "directSocket") {
@@ -231,6 +249,8 @@ function toActiveConnection(connection: HostConnection): ActiveConnection {
       type: "directTcp",
       endpoint: connection.endpoint,
       display: connection.endpoint,
+      ...(connection.basePath !== undefined ? { basePath: connection.basePath } : {}),
+      ...(connection.useTls !== undefined ? { useTls: connection.useTls } : {}),
     };
   }
   return {
@@ -456,11 +476,48 @@ function toSnapshotConnectionPatch(
   };
 }
 
+function connectionsForRuntime(host: HostProfile): HostConnection[] {
+  if (!isSelfHostedBuildEnabled()) {
+    return host.connections;
+  }
+  const managedConnections = host.connections.filter(
+    (connection) => connection.type === "directTcp" && isSelfHostedConnectionId(connection.id),
+  );
+  return managedConnections;
+}
+
 function buildConnectionCandidates(host: HostProfile): ConnectionCandidate[] {
-  return host.connections.map((connection) => ({
+  return connectionsForRuntime(host).map((connection) => ({
     connectionId: connection.id,
     connection,
   }));
+}
+
+interface ProbeCycleSelection {
+  candidates: ConnectionCandidate[];
+  candidateIds: Set<string>;
+  currentActiveCandidate: ConnectionCandidate | null;
+  activeProbe: ConnectionProbeState | null;
+}
+
+function buildProbeCycleSelection(input: {
+  host: HostProfile;
+  activeConnectionId: string | null;
+  probeByConnectionId: ReadonlyMap<string, ConnectionProbeState>;
+}): ProbeCycleSelection {
+  const candidates = buildConnectionCandidates(input.host);
+  const currentActiveCandidate =
+    candidates.find((candidate) => candidate.connectionId === input.activeConnectionId) ?? null;
+  const activeProbe =
+    input.activeConnectionId === null
+      ? null
+      : (input.probeByConnectionId.get(input.activeConnectionId) ?? null);
+  return {
+    candidates,
+    candidateIds: new Set(candidates.map((candidate) => candidate.connectionId)),
+    currentActiveCandidate,
+    activeProbe,
+  };
 }
 
 function findConnectionById(host: HostProfile, connectionId: string | null): HostConnection | null {
@@ -551,6 +608,7 @@ function createDefaultDeps(): HostRuntimeControllerDeps {
           ...webSocketConfig,
           url: buildDaemonWebSocketUrl(connection.endpoint, {
             useTls: connection.useTls ?? false,
+            ...(connection.basePath !== undefined ? { basePath: connection.basePath } : {}),
           }),
           ...(connection.password ? { password: connection.password } : {}),
         });
@@ -798,7 +856,8 @@ export class HostRuntimeController {
 
   private async runProbeCycle(): Promise<void> {
     const requestVersion = ++this.probeRequestVersion;
-    if (this.host.connections.length === 0) {
+    const runtimeConnections = connectionsForRuntime(this.host);
+    if (runtimeConnections.length === 0) {
       if (!this.isCurrentProbeRequest(requestVersion)) {
         return;
       }
@@ -814,8 +873,14 @@ export class HostRuntimeController {
     const isOnline = this.snapshot.connectionStatus === "online";
     const activeConnectionId = this.snapshot.activeConnectionId;
     const hasActiveOnlineConnection = isOnline && activeConnectionId !== null;
+    const activeConnectionIsDisallowed =
+      activeConnectionId !== null &&
+      !runtimeConnections.some((connection) => connection.id === activeConnectionId);
 
-    const connectionsToProbe = this.host.connections.filter((connection) => {
+    const connectionsToProbe = runtimeConnections.filter((connection) => {
+      if (activeConnectionIsDisallowed) {
+        return true;
+      }
       const lastProbed = this.connectionLastProbedAt.get(connection.id);
       if (lastProbed == null) {
         return true;
@@ -887,13 +952,16 @@ export class HostRuntimeController {
       }
 
       const currentActiveConnectionId = this.snapshot.activeConnectionId;
-      const activeProbe = currentActiveConnectionId
-        ? probeByConnectionId.get(currentActiveConnectionId)
-        : null;
+      const { activeProbe, candidates, candidateIds, currentActiveCandidate } =
+        buildProbeCycleSelection({
+          host: this.host,
+          activeConnectionId: currentActiveConnectionId,
+          probeByConnectionId,
+        });
 
-      if (!currentActiveConnectionId || !findConnectionById(this.host, currentActiveConnectionId)) {
+      if (!currentActiveConnectionId || !currentActiveCandidate) {
         const nextConnectionId = selectBestConnection({
-          candidates: buildConnectionCandidates(this.host),
+          candidates,
           probeByConnectionId,
         });
         if (nextConnectionId) {
@@ -901,13 +969,15 @@ export class HostRuntimeController {
             connectionId: nextConnectionId,
             expectedProbeVersion: requestVersion,
           });
+        } else if (currentActiveConnectionId) {
+          await this.clearActiveConnection();
         }
         return;
       }
 
       if (activeProbe?.status === "unavailable") {
         const nextConnectionId = selectBestConnection({
-          candidates: buildConnectionCandidates(this.host),
+          candidates,
           probeByConnectionId,
         });
         if (nextConnectionId && nextConnectionId !== currentActiveConnectionId) {
@@ -928,7 +998,7 @@ export class HostRuntimeController {
       const available = Array.from(probeByConnectionId.entries())
         .filter(
           (entry): entry is [string, Extract<ConnectionProbeState, { status: "available" }>] =>
-            entry[1].status === "available",
+            candidateIds.has(entry[0]) && entry[1].status === "available",
         )
         .map(([connectionId, probe]) => ({
           connectionId,
@@ -1188,6 +1258,15 @@ export class HostRuntimeController {
     }
   }
 
+  private async clearActiveConnection(): Promise<void> {
+    await this.disposePreviousActiveClient();
+    this.applyConnectionEvent({ type: "no_connections" });
+    this.updateSnapshot({
+      ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
+      client: null,
+    });
+  }
+
   private buildAgentDirectoryStatusPatch(): Partial<HostRuntimeSnapshotPatch> {
     if (this.snapshot.hasEverLoadedAgentDirectory) return {};
     const tag = this.connectionMachineState.tag;
@@ -1353,13 +1432,8 @@ export function readInitialDaemonConnectionHint(input?: {
   return result.success ? result.data : null;
 }
 
-function readConfiguredLocalDaemonOverride(): string | null {
-  const value = process.env.EXPO_PUBLIC_LOCAL_DAEMON?.trim();
-  return value && value.length > 0 ? value : null;
-}
-
 export function hasConfiguredLocalDaemonOverride(): boolean {
-  return readConfiguredLocalDaemonOverride() !== null;
+  return readSelfHostedLocalDaemonOverride() !== null;
 }
 
 function isPlaceholderServerId(serverId: string): boolean {
@@ -1386,6 +1460,11 @@ interface AgentDirectoryRefreshInput {
   page?: FetchAgentsOptions["page"];
 }
 
+interface SelfHostedPendingConnection {
+  entry: SelfHostedManifestEntry;
+  connection: DirectTcpHostConnection;
+}
+
 export class HostRuntimeStore {
   private controllers = new Map<string, HostRuntimeController>();
   private serverListeners = new Map<string, Set<() => void>>();
@@ -1405,6 +1484,9 @@ export class HostRuntimeStore {
   private nextCancellationRequestId = 0;
   private timelineReplicaByServer = new Map<string, TimelineReplica>();
   private configuredOverrideBootstrapInFlight: Promise<void> | null = null;
+  private selfHostedPendingConnections = new Map<string, SelfHostedPendingConnection>();
+  private selfHostedRetryIntervalHandle: ReturnType<typeof setInterval> | null = null;
+  private selfHostedRetryInFlight: Promise<void> | null = null;
   private bootPromise: Promise<void> | null = null;
   private appVisible = true;
   private storage: HostRuntimeStorage;
@@ -1456,7 +1538,7 @@ export class HostRuntimeStore {
   }
 
   private async runBoot(): Promise<void> {
-    const override = readConfiguredLocalDaemonOverride();
+    const override = readSelfHostedLocalDaemonOverride();
     await this.loadFromStorage();
     this.markHostRegistryLoaded();
 
@@ -1471,6 +1553,10 @@ export class HostRuntimeStore {
     }
 
     if (shouldUseDesktopDaemon()) {
+      return;
+    }
+    if (isSelfHostedBuildEnabled()) {
+      await this.bootstrapSelfHostedManifest();
       return;
     }
 
@@ -1564,6 +1650,126 @@ export class HostRuntimeStore {
         endpoint: LOCALHOST_FALLBACK_ENDPOINT,
         error,
       });
+    }
+  }
+
+  private async bootstrapSelfHostedManifest(): Promise<void> {
+    const target = readSelfHostedBrowserTarget();
+    if (!target) {
+      console.warn("[HostRuntime] self-hosted build requires an HTTP browser origin");
+      return;
+    }
+    let manifest: SelfHostedManifestEntry[];
+    try {
+      manifest = await fetchSelfHostedManifest();
+    } catch (error) {
+      console.warn("[HostRuntime] self-hosted manifest fetch failed", { error });
+      return;
+    }
+
+    let reconciled: HostProfile[];
+    try {
+      reconciled = reconcileSelfHostedHostProfiles({
+        profiles: this.hosts,
+        manifest,
+        endpoint: target.endpoint,
+        useTls: target.useTls,
+      });
+    } catch (error) {
+      console.warn("[HostRuntime] self-hosted manifest was rejected", { error });
+      return;
+    }
+
+    if (!equal(reconciled, this.hosts)) {
+      this.setHostsAndSync(reconciled);
+      try {
+        await this.persistHosts();
+      } catch (error) {
+        console.error("[HostRuntime] Failed to persist self-hosted host registry", error);
+      }
+    }
+
+    const pending = manifest.map((entry) => ({
+      entry,
+      connection: buildSelfHostedConnection({
+        entry,
+        endpoint: target.endpoint,
+        useTls: target.useTls,
+      }),
+    }));
+    const pendingById = new Map<string, SelfHostedPendingConnection>();
+    for (const candidate of pending) {
+      pendingById.set(candidate.entry.id, candidate);
+    }
+    this.selfHostedPendingConnections = pendingById;
+    await this.retrySelfHostedPendingConnections();
+
+    try {
+      await this.runProbeCycleNow();
+    } catch (error) {
+      console.error("[HostRuntime] self-hosted probe cycle failed", { error });
+    }
+    try {
+      await this.persistHosts();
+    } catch (error) {
+      console.error("[HostRuntime] Failed to persist self-hosted host registry", { error });
+    }
+  }
+
+  private async retrySelfHostedPendingConnections(): Promise<void> {
+    const inFlight = this.selfHostedRetryInFlight;
+    if (inFlight) {
+      await inFlight;
+      return;
+    }
+
+    const retry = this.runSelfHostedPendingConnections();
+    this.selfHostedRetryInFlight = retry;
+    try {
+      await retry;
+    } catch (error) {
+      console.error("[HostRuntime] self-hosted daemon retry failed", { error });
+    } finally {
+      if (this.selfHostedRetryInFlight === retry) {
+        this.selfHostedRetryInFlight = null;
+      }
+      this.ensureSelfHostedRetryInterval();
+    }
+  }
+
+  private async runSelfHostedPendingConnections(): Promise<void> {
+    const pending = Array.from(this.selfHostedPendingConnections.values());
+    const results = await Promise.allSettled(
+      pending.map(async ({ entry, connection }) => {
+        await this.probeAndUpsertConnection({
+          connection,
+          label: entry.label,
+        });
+        this.selfHostedPendingConnections.delete(entry.id);
+      }),
+    );
+    for (const [index, result] of results.entries()) {
+      if (result.status === "rejected") {
+        console.warn("[HostRuntime] self-hosted daemon probe failed", {
+          id: pending[index]?.entry.id,
+          error: result.reason,
+        });
+      }
+    }
+  }
+
+  private ensureSelfHostedRetryInterval(): void {
+    if (this.selfHostedPendingConnections.size === 0) {
+      if (this.selfHostedRetryIntervalHandle) {
+        clearInterval(this.selfHostedRetryIntervalHandle);
+        this.selfHostedRetryIntervalHandle = null;
+      }
+      return;
+    }
+    if (!this.selfHostedRetryIntervalHandle) {
+      this.selfHostedRetryIntervalHandle = setInterval(() => {
+        void this.retrySelfHostedPendingConnections();
+      }, SELF_HOSTED_DISCOVERY_RETRY_MS);
     }
   }
 

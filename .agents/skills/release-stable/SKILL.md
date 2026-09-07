@@ -1,9 +1,13 @@
 ---
 name: release-stable
-description: Cut a stable release of Paseo (fresh patch or minor, or promote from beta). Use when the user says "release stable", "ship stable", "promote", "release:patch", "release:minor", "release:promote", or "/release-stable".
+description: Inspect the automatic stable Docker publication for this fork. Use when the user asks about a stable release.
 user-invocable: true
 ---
 
-# Release stable
+# Fork stable release
 
-Follow the applicable flow and the **Stable release (or promotion)** completion checklist in `docs/release.md` end-to-end.
+This fork does not run a manual release command. Read `docs/release.md`.
+The Docker workflow derives the highest reachable stable upstream base and
+creates the next `vX.Y.Z-fork.N` tag automatically after `main` is published
+and the image succeeds. It publishes the immutable versioned image and updates
+`latest`.

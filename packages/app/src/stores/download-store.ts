@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { File as FSFile, Paths } from "expo-file-system";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import type { HostProfile } from "@/types/host-connection";
+import type { HostConnection, HostProfile } from "@/types/host-connection";
 import { buildDaemonWebSocketUrl } from "@/utils/daemon-endpoints";
 import { openExternalUrl } from "@/utils/open-external-url";
 import { isWeb } from "@/constants/platform";
@@ -37,6 +37,7 @@ interface DownloadState {
     fileName: string;
     path: string;
     daemonProfile: HostProfile | undefined;
+    activeConnectionId: string | null;
     requestFileDownloadToken: (path: string) => Promise<{
       token: string | null;
       fileName: string | null;
@@ -66,6 +67,7 @@ export const useDownloadStore = create<DownloadState>()((set, get) => ({
     fileName,
     path,
     daemonProfile,
+    activeConnectionId,
     requestFileDownloadToken,
   }) => {
     const id = generateDownloadId();
@@ -89,7 +91,7 @@ export const useDownloadStore = create<DownloadState>()((set, get) => ({
         throw new Error(tokenResponse.error ?? i18n.t("downloads.requestTokenFailed"));
       }
 
-      const downloadTarget = resolveDaemonDownloadTarget(daemonProfile);
+      const downloadTarget = resolveDaemonDownloadTarget(daemonProfile, activeConnectionId);
       if (!downloadTarget.baseUrl) {
         throw new Error(i18n.t("downloads.hostUnavailable"));
       }
@@ -238,14 +240,30 @@ function findMostRecentDownloadId(downloads: Map<string, Download>): string | nu
   return mostRecent?.id ?? null;
 }
 
-interface DownloadTarget {
+export interface DownloadTarget {
   baseUrl: string | null;
   authHeader: string | null;
   authCredentials: { username: string; password: string } | null;
 }
 
-function resolveDaemonDownloadTarget(daemon?: HostProfile): DownloadTarget {
-  const connection = daemon?.connections.find((conn) => conn.type === "directTcp") ?? null;
+export function resolveDaemonDownloadTarget(
+  daemon: HostProfile | undefined,
+  activeConnectionId: string | null,
+): DownloadTarget {
+  const directConnections =
+    daemon?.connections.filter(
+      (connection): connection is Extract<HostConnection, { type: "directTcp" }> =>
+        connection.type === "directTcp",
+    ) ?? [];
+  const activeConnection = daemon?.connections.find(
+    (candidate) => candidate.id === activeConnectionId,
+  );
+  const connection =
+    activeConnection?.type === "directTcp"
+      ? activeConnection
+      : (directConnections.find((candidate) => candidate.basePath !== undefined) ??
+        directConnections[0] ??
+        null);
   if (!connection) {
     return { baseUrl: null, authHeader: null, authCredentials: null };
   }
@@ -253,7 +271,10 @@ function resolveDaemonDownloadTarget(daemon?: HostProfile): DownloadTarget {
   let parsed: URL;
   try {
     parsed = new URL(
-      buildDaemonWebSocketUrl(connection.endpoint, { useTls: connection.useTls ?? false }),
+      buildDaemonWebSocketUrl(connection.endpoint, {
+        useTls: connection.useTls ?? false,
+        ...(connection.basePath !== undefined ? { basePath: connection.basePath } : {}),
+      }),
     );
   } catch {
     return { baseUrl: null, authHeader: null, authCredentials: null };
@@ -277,7 +298,7 @@ function resolveDaemonDownloadTarget(daemon?: HostProfile): DownloadTarget {
 
   parsed.pathname = parsed.pathname.replace(/\/ws\/?$/, "/");
 
-  const baseUrl = parsed.origin;
+  const baseUrl = parsed.toString();
   const authHeader = authCredentials
     ? `Basic ${btoa(`${authCredentials.username}:${authCredentials.password}`)}`
     : null;
@@ -290,7 +311,7 @@ function buildDownloadUrl(
   token: string,
   authCredentials: { username: string; password: string } | null,
 ): string {
-  const url = new URL("/api/files/download", baseUrl);
+  const url = new URL("api/files/download", baseUrl);
   url.searchParams.set("token", token);
   if (authCredentials) {
     url.username = authCredentials.username;

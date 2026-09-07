@@ -4,187 +4,147 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "docker/**"
       - ".dockerignore"
-      - ".github/workflows/docker.yml"
+      - ".github/workflows/**"
+      - "docker/**"
       - "package.json"
       - "package-lock.json"
       - "patches/**"
       - "scripts/**"
-      - "tsconfig.json"
-      - "tsconfig.base.json"
-      - "packages/app/**"
-      - "packages/cli/**"
-      - "packages/client/**"
-      - "packages/expo-two-way-audio/**"
-      - "packages/highlight/**"
-      - "packages/plugin/**"
-      - "packages/protocol/**"
-      - "packages/relay/**"
-      - "packages/server/**"
+      - "tsconfig*.json"
+      - "packages/**"
   push:
     branches: [main]
-    tags:
-      - "v*"
-  workflow_dispatch:
-    inputs:
-      paseo_version:
-        description: "Expected source version to build. Required when publish is true."
-        required: false
-        default: ""
-      publish:
-        description: "Publish the image to GHCR. Manual publishes require paseo_version."
-        required: false
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
-      publish_latest:
-        description: "Also publish ghcr.io/getpaseo/paseo:latest. Ignored for prereleases."
-        required: false
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
 
 concurrency:
-  group: docker-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: paseo-docker-fork
+  cancel-in-progress: false
 
 env:
-  REGISTRY: ghcr.io
-  PLATFORMS: linux/amd64,linux/arm64
+  IMAGE: ghcr.io/mouriya-s-lab/paseo
+  UPSTREAM_REPOSITORY: https://github.com/getpaseo/paseo.git
 
 jobs:
-  setup:
-    runs-on: ubuntu-latest
-    outputs:
-      image: ${{ steps.values.outputs.image }}
-      install_version: ${{ steps.values.outputs.install_version }}
-      publish: ${{ steps.values.outputs.publish }}
-      check_tag: ${{ steps.values.outputs.check_tag }}
-      publish_tags: ${{ steps.values.outputs.publish_tags }}
+  docker:
+    # Public fork PRs must not execute untrusted code on the mesh runner.
+    if: >-
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+    runs-on: [self-hosted, linux, vctcn, netbird, x64]
+    permissions:
+      contents: write
+      packages: write
     steps:
-      - uses: actions/checkout@v6
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - id: values
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve upstream and fork release
+        id: release
+        if: github.event_name != 'pull_request'
         env:
-          INPUT_PASEO_VERSION: ${{ inputs.paseo_version }}
-          INPUT_PUBLISH: ${{ inputs.publish }}
-          INPUT_PUBLISH_LATEST: ${{ inputs.publish_latest }}
-          REPO_OWNER: ${{ github.repository_owner }}
-          REF_NAME: ${{ github.ref_name }}
+          RELEASE_REF: ${{ github.sha }}
         run: |
           set -euo pipefail
+          git remote add upstream "$UPSTREAM_REPOSITORY" 2>/dev/null || git remote set-url upstream "$UPSTREAM_REPOSITORY"
+          git fetch --no-tags upstream main
+          git fetch --tags upstream
+          git fetch --tags origin
+          release_json="$(node scripts/fork-release-version.mjs --ref "$RELEASE_REF")"
+          RELEASE_JSON="$release_json" node --input-type=module >> "$GITHUB_OUTPUT" <<'NODE'
+          const release = JSON.parse(process.env.RELEASE_JSON ?? "");
+          for (const [key, value] of Object.entries(release)) {
+            if (typeof value === "string" && value.includes("\n")) {
+              throw new Error(`Release output ${key} contains a newline`);
+            }
+            console.log(`${key}=${value}`);
+          }
+          NODE
 
-          owner="$(printf '%s' "${REPO_OWNER}" | tr '[:upper:]' '[:lower:]')"
-          image="ghcr.io/${owner}/paseo"
-          package_version="$(node -p "require('./package.json').version")"
-          install_version="${INPUT_PASEO_VERSION:-${package_version}}"
-          publish=false
-          publish_latest=false
-          prerelease=false
-
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            install_version="${REF_NAME#v}"
-            publish=true
-            if [[ "${REF_NAME}" == *-* ]]; then
-              prerelease=true
-            else
-              publish_latest=true
-            fi
-          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            if [[ "${INPUT_PUBLISH:-false}" == "true" ]]; then
-              if [[ -z "${INPUT_PASEO_VERSION}" || "${INPUT_PASEO_VERSION}" == "latest" ]]; then
-                echo "::error::paseo_version is required for manual Docker publishes."
-                exit 1
-              fi
-              publish=true
-            fi
-
-            if [[ "${install_version}" == *-* ]]; then
-              prerelease=true
-            fi
-
-            if [[ "${INPUT_PUBLISH_LATEST:-false}" == "true" && "${prerelease}" != "true" ]]; then
-              publish_latest=true
-            fi
-          fi
-
-          check_tag="${image}:check-${GITHUB_SHA::12}"
-          publish_tags="${image}:${install_version}"
-          if [[ "${publish_latest}" == "true" ]]; then
-            publish_tags="${publish_tags}"$'\n'"${image}:latest"
+      - name: Resolve image build values
+        id: values
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.releaseTag }}
+          IMAGE_TAG: ${{ steps.release.outputs.imageTag }}
+          BASE_VERSION: ${{ steps.release.outputs.baseVersion }}
+          PUBLISH_LATEST: ${{ steps.release.outputs.publishLatest }}
+          ALREADY_PUBLISHED: ${{ steps.release.outputs.alreadyPublished }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            base_version="$(node -p "require('./package.json').version")"
+            image_tag="pr-${GITHUB_SHA:0:12}"
+            push=false
+            skip=false
+            publish_latest=false
+          else
+            base_version="$BASE_VERSION"
+            image_tag="$IMAGE_TAG"
+            push=true
+            publish_latest="$PUBLISH_LATEST"
+            skip="$ALREADY_PUBLISHED"
+            test -n "$RELEASE_TAG"
+            test -n "$base_version"
+            test "$(node -p "require('./package.json').version")" = "$base_version"
           fi
 
           {
-            echo "image=${image}"
-            echo "install_version=${install_version}"
-            echo "publish=${publish}"
-            echo "check_tag=${check_tag}"
-            echo "publish_tags<<EOF"
-            echo "${publish_tags}"
+            echo "base_version=$base_version"
+            echo "image_tag=$image_tag"
+            echo "push=$push"
+            echo "skip=$skip"
+            echo "release_tag=$RELEASE_TAG"
+            echo "tags<<EOF"
+            echo "$IMAGE:$image_tag"
+            if [[ "$publish_latest" == "true" ]]; then
+              echo "$IMAGE:latest"
+            fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-          echo "Resolved image=${image} install_version=${install_version} publish=${publish}"
-
-  build:
-    needs: setup
-    if: needs.setup.outputs.publish != 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
-
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/base/Dockerfile
-          platforms: ${{ env.PLATFORMS }}
-          build-args: |
-            PASEO_VERSION=${{ needs.setup.outputs.install_version }}
-          tags: ${{ needs.setup.outputs.check_tag }}
-          push: false
-          provenance: false
-          cache-from: type=gha,scope=paseo
-          cache-to: type=gha,scope=paseo,mode=max
-
-  publish:
-    needs: setup
-    if: needs.setup.outputs.publish == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
-
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
+        uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v7
+      - name: Build and publish Docker image
+        if: steps.values.outputs.skip != 'true'
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/base/Dockerfile
-          platforms: ${{ env.PLATFORMS }}
+          platforms: linux/amd64
           build-args: |
-            PASEO_VERSION=${{ needs.setup.outputs.install_version }}
-          tags: ${{ needs.setup.outputs.publish_tags }}
-          push: true
+            PASEO_VERSION=${{ steps.values.outputs.base_version }}
+            EXPO_PUBLIC_PASEO_SELFHOSTED=false
+            EXPO_PUBLIC_LOCAL_DAEMON=self-hosted
+          tags: ${{ steps.values.outputs.tags }}
+          push: ${{ steps.values.outputs.push == 'true' }}
           provenance: false
-          cache-from: type=gha,scope=paseo
-          cache-to: type=gha,scope=paseo,mode=max
+          cache-from: type=gha,scope=paseo-fork
+          cache-to: type=gha,scope=paseo-fork,mode=max
+
+      - name: Tag the published fork commit
+        if: github.event_name != 'pull_request' && steps.values.outputs.skip != 'true'
+        env:
+          RELEASE_TAG: ${{ steps.values.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$RELEASE_TAG"

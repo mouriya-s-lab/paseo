@@ -1,0 +1,32 @@
+packages/app/src/fork-features/self-hosted/runtime.ts	fork-owned	Same-origin manifest, managed connections, and legacy self-hosted endpoint resolution
+packages/app/src/fork-features/self-hosted/runtime.test.ts	fork-owned	Focused manifest, reconciliation, and endpoint override behavior
+packages/app/src/runtime/host-runtime.ts	trunk-patch	No registration seam for host runtime probing/bootstrap; minimal fork wiring for self-hosted connections
+packages/app/src/types/host-connection.ts	trunk-patch	No connection-type extension seam; optional proxy basePath must persist through the host registry
+packages/app/src/stores/download-store.ts	trunk-patch	Download URL derivation has no strategy registration seam; preserve proxy basePath
+packages/app/src/utils/test-daemon-connection.ts	trunk-patch	Direct TCP probe config has no provider seam; preserve proxy basePath
+packages/protocol/src/daemon-endpoints.ts	trunk-patch	Endpoint URL builder has no provider seam; add validated optional proxy basePath
+packages/protocol/src/host-connection-schema.ts	trunk-patch	Direct TCP wire/storage schema has no provider seam; add backward-compatible optional basePath
+scripts/fork-release-version.mjs	fork-owned	Automatic upstream-base and fork-suffix release resolver
+scripts/fork-release-version.test.mjs	fork-owned	Resolver allocation and idempotency coverage
+.github/workflows/docker.yml	fork-owned	Docker-only self-hosted build and automatic fork tag/image publication
+README.md	fork-owned	Fork Docker image quick start
+README.ko.md	fork-owned	Fork Docker image quick start in Korean
+docker/README.md	fork-owned	Fork Docker image usage and child-image example
+docker/docker-compose.example.yml	fork-owned	Fork GHCR image Compose example
+docker/Dockerfile.agents.example	fork-owned	Fork GHCR child-image example
+public-docs/docker.md	fork-owned	Public fork Docker documentation
+public-docs/index.md	fork-owned	Public fork Docker quick start
+docs/docker.md	fork-owned	Fork Docker runtime and release boundary
+docs/release.md	fork-owned	Docker-only fork release policy
+docs/android.md	fork-owned	Documents that native release automation is absent
+docs/testing.md	fork-owned	Fork CI verification boundary
+.agents/skills/release-beta/SKILL.md	fork-owned	Fork prerelease policy
+.agents/skills/release-stable/SKILL.md	fork-owned	Fork stable policy
+.claude/rules/paseo-fork-release.rule.md	fork-owned	Fork release and placement policy
+.github/actionlint.yaml	fork-owned	Declares the self-hosted GARM labels for workflow validation
+docker/base/Dockerfile	trunk-patch	No Docker build extension seam; inject fork web-build settings and enforce the release version
+packages/app/src/hooks/use-file-download.ts	trunk-patch	Download action has no transport binding seam; pass the active host connection identity
+packages/app/src/utils/workspace-script-links.ts	trunk-patch	Managed proxy connections cannot expose direct workspace service ports; suppress invalid direct targets and honor TLS
+packages/app/src/utils/workspace-script-links.test.ts	fork-owned	Regression coverage for managed proxy workspace links
+packages/protocol/src/daemon-endpoints.test.ts	fork-owned	Regression coverage for validated proxy endpoint paths
+packages/app/src/stores/download-store.test.ts	fork-owned	Regression coverage for active connection download URL binding
