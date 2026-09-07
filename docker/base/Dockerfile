@@ -4,8 +4,12 @@ ARG NODE_IMAGE=node:22-bookworm-slim
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS source-pack
 
 ARG PASEO_VERSION
+ARG EXPO_PUBLIC_PASEO_SELFHOSTED=false
+ARG EXPO_PUBLIC_LOCAL_DAEMON=self-hosted
 
-ENV ONNXRUNTIME_NODE_INSTALL=skip
+ENV EXPO_PUBLIC_PASEO_SELFHOSTED=${EXPO_PUBLIC_PASEO_SELFHOSTED} \
+    EXPO_PUBLIC_LOCAL_DAEMON=${EXPO_PUBLIC_LOCAL_DAEMON} \
+    ONNXRUNTIME_NODE_INSTALL=skip
 
 WORKDIR /tmp/paseo-src
 COPY . .
@@ -18,6 +22,7 @@ RUN set -eux; \
     npm ci
 
 RUN set -eux; \
+    export EXPO_PUBLIC_PASEO_SELFHOSTED EXPO_PUBLIC_LOCAL_DAEMON; \
     mkdir -p /tmp/paseo-packs; \
     npm pack --workspace=@getpaseo/highlight --pack-destination /tmp/paseo-packs; \
     npm pack --workspace=@getpaseo/relay --pack-destination /tmp/paseo-packs; \

@@ -33,7 +33,7 @@ Configuration and local state live under `PASEO_HOME` (defaults to `~/.paseo`).
 
 ## Docker
 
-For servers, dev boxes, NAS devices, or homelab hosts, run the official image:
+For servers, dev boxes, NAS devices, or homelab hosts, run the fork image:
 
 ```bash
 docker run -d --name paseo \
@@ -41,7 +41,7 @@ docker run -d --name paseo \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
-  ghcr.io/getpaseo/paseo:latest
+  ghcr.io/mouriya-s-lab/paseo:latest
 ```
 
 Then open `http://localhost:6767`.

@@ -1,28 +1,26 @@
-# Running Paseo in Docker
+# Running the Paseo fork in Docker
 
-Paseo publishes a container image for running the daemon on a server, VM, NAS,
-or homelab box. The image also serves the bundled browser web UI, so one
-container gives you both the daemon API and a self-hosted UI.
-
+The fork publishes one artifact: a Docker image containing the Paseo daemon and
+its bundled browser UI. The image runs on a server, VM, NAS, or homelab host.
 The image source lives in [`docker/`](../docker/).
 
 ## How it works
 
-The official image:
+The image:
 
-- builds `@getpaseo/server` and `@getpaseo/cli` from source-built workspace tarballs
-- runs the daemon as the non-root `paseo` user
-- listens on `0.0.0.0:6767` inside the container
-- enables the bundled daemon web UI with `PASEO_WEB_UI_ENABLED=true`
-- stores daemon state and agent credentials under `/home/paseo`
-- leaves agent CLIs out of the base image
+- builds the daemon and CLI from source-built workspace tarballs;
+- runs the daemon as the non-root `paseo` user;
+- listens on `0.0.0.0:6767` inside the container;
+- serves the bundled web UI with `PASEO_WEB_UI_ENABLED=true`;
+- stores daemon state and agent credentials under `/home/paseo`;
+- leaves agent CLIs out of the base image.
 
 Open the container's HTTP origin, for example `http://localhost:6767`, to load
-the web UI. The served app receives a same-origin connection hint and connects
-back to that daemon. Static UI files load without daemon auth; API and
-WebSocket requests still require `PASEO_PASSWORD` when one is configured.
+the web UI. The Docker build sets `EXPO_PUBLIC_LOCAL_DAEMON=self-hosted`, so
+the browser can use the page host as its direct TCP endpoint. API and WebSocket
+requests still require `PASEO_PASSWORD` when one is configured.
 
-## Quick Start
+## Quick start
 
 ```bash
 docker run -d --name paseo \
@@ -30,7 +28,7 @@ docker run -d --name paseo \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
-  ghcr.io/getpaseo/paseo:latest
+  ghcr.io/mouriya-s-lab/paseo:latest
 ```
 
 Then open:
@@ -57,7 +55,7 @@ Minimal example:
 ```yaml
 services:
   paseo:
-    image: ghcr.io/getpaseo/paseo:latest
+    image: ghcr.io/mouriya-s-lab/paseo:latest
     restart: unless-stopped
     ports:
       - "6767:6767"
@@ -71,13 +69,10 @@ services:
 ## Installing Agents
 
 The base image does not preinstall Claude Code, Codex, OpenCode, Copilot, Pi, or
-other agent CLIs. That keeps the default image small and avoids coupling Paseo
-releases to third-party agent release cycles.
-
-Create a child image for the agents you use:
+other agent CLIs. Create a child image for the agents you use:
 
 ```Dockerfile
-FROM ghcr.io/getpaseo/paseo:latest
+FROM ghcr.io/mouriya-s-lab/paseo:latest
 
 USER root
 RUN npm install -g @openai/codex @anthropic-ai/claude-code opencode-ai
@@ -89,22 +84,12 @@ Build it:
 docker build -f Dockerfile -t paseo-with-agents .
 ```
 
-Then use `image: paseo-with-agents` in Compose.
-
-Leave the child image user as root. The base entrypoint uses root only for
-first-run directory setup, then drops the daemon and launched agents to the
-non-root `paseo` user.
+Then use `image: paseo-with-agents` in Compose. Leave the child image user as
+root. The base entrypoint uses root only for first-run directory setup, then
+drops the daemon and launched agents to the non-root `paseo` user.
 
 An example child image is in
 [`docker/Dockerfile.agents.example`](../docker/Dockerfile.agents.example).
-
-You can also mount credentials from the host or run agent login once inside the
-container:
-
-```bash
-docker exec -it --user paseo paseo codex
-docker exec -it --user paseo paseo claude
-```
 
 Agent credentials and config persist in `/home/paseo`, alongside daemon state.
 Provider environment variables such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
@@ -113,10 +98,10 @@ or `compose.environment`; Paseo passes them to launched agents.
 
 ## Volumes
 
-| Mount         | Purpose                                                                  |
-| ------------- | ------------------------------------------------------------------------ |
-| `/home/paseo` | Paseo state under `.paseo` plus agent config such as `.codex`, `.claude` |
-| `/workspace`  | Code that Paseo and launched agents can read and write                   |
+| Mount         | Purpose                                                                     |
+| ------------- | --------------------------------------------------------------------------- |
+| `/home/paseo` | Paseo state under `.paseo` plus agent config such as `.codex` and `.claude` |
+| `/workspace`  | Code that Paseo and launched agents can read and write                      |
 
 The image defaults:
 
@@ -128,13 +113,27 @@ The image defaults:
 
 If you bind-mount host directories on Linux, make sure the container user can
 write them. The built-in `paseo` user has uid/gid `1000:1000`. For a different
-host uid/gid, either adjust ownership on the mounted directories or run the
-container with Docker's `--user` / Compose `user:` option.
+host uid/gid, adjust ownership or set Docker's `--user` / Compose `user:` option.
+
+## Same-origin multi-daemon mode
+
+The fork code also supports a public App origin that proxies several daemons.
+That mode requires a deployment layer to serve `/_paseo/hosts.json` and route
+each `/daemons/<id>/` path to a daemon. The manifest entries are strict objects:
+
+```json
+[{ "id": "alpha", "label": "Alpha", "basePath": "/daemons/alpha" }]
+```
+
+Build the browser bundle with `EXPO_PUBLIC_PASEO_SELFHOSTED=true` only when that
+manifest and proxy are present. The standard daemon image above keeps this flag
+false and connects to its own daemon. The connection and persistence code lives
+in [`packages/app/src/fork-features/self-hosted/`](../packages/app/src/fork-features/self-hosted/).
 
 ## Reverse Proxies
 
-When serving Paseo behind a reverse proxy, forward normal HTTP requests and
-WebSocket upgrades to the same daemon port.
+When serving the standard daemon image behind a reverse proxy, forward normal
+HTTP requests and WebSocket upgrades to port 6767.
 
 Caddy example:
 
@@ -182,12 +181,12 @@ IPs and `localhost` are allowed by default.
 - The container is the isolation boundary for agents. Agents can read and write
   whatever you mount into `/workspace` and whatever credentials you place in
   `/home/paseo`.
-- The bundled web UI static files are public on the daemon origin. The daemon
-  API and WebSocket remain protected by password auth when configured.
+- Bundled web UI static files are public on the daemon origin. The daemon API and
+  WebSocket remain protected by password auth when configured.
 
 See [SECURITY.md](../SECURITY.md) for the daemon trust model.
 
-## Building Locally
+## Building locally
 
 ```bash
 docker build -f docker/base/Dockerfile -t paseo:local .
@@ -197,34 +196,38 @@ To assert the source tree version while building:
 
 ```bash
 docker build \
-  --build-arg PASEO_VERSION=0.1.102 \
-  -t paseo:0.1.102 \
+  --build-arg PASEO_VERSION=0.7.2 \
+  --build-arg EXPO_PUBLIC_PASEO_SELFHOSTED=false \
+  --build-arg EXPO_PUBLIC_LOCAL_DAEMON=self-hosted \
+  -t paseo:0.7.2 \
   -f docker/base/Dockerfile \
   .
 ```
 
-The Docker workflow builds the image on pull requests and on `main` as a
-non-publishing check. Stable `vX.Y.Z` tag pushes publish
-`ghcr.io/getpaseo/paseo:X.Y.Z` and `ghcr.io/getpaseo/paseo:latest`. Beta tags
-publish only the exact prerelease tag, such as
-`ghcr.io/getpaseo/paseo:0.1.102-beta.1`, and do not update `latest`.
+## Fork release workflow
 
-To replace a Docker image in place without rebuilding desktop, APK, or EAS
-mobile release artifacts, dispatch the Docker workflow manually instead of
-pushing a `v*` release tag:
+The fork's only GitHub Actions build is
+[`.github/workflows/docker.yml`](../.github/workflows/docker.yml). It runs on
+the self-hosted GARM labels `self-hosted`, `linux`, `vctcn`, `netbird`, and
+`x64`.
+
+- Same-repository pull requests build a native `linux/amd64` image without pushing.
+- Every `main` push and the hourly schedule resolve the highest reachable upstream release tag.
+- A manual dispatch on `main` runs the same release path.
+- A stable upstream base `vX.Y.Z` becomes fork tag `vX.Y.Z-fork.N` and image tag `X.Y.Z-fork.N`; `latest` points to that image too.
+- An upstream prerelease `vX.Y.Z-<id>` becomes `vX.Y.Z-<id>-fork.N` and does not update `latest`.
+- `N` starts at `0`, increments from the highest existing suffix for that upstream base, and is reused when the same commit is retried.
+- The image is built and pushed before the fork tag is created.
+
+The resolver can be inspected locally:
 
 ```bash
-gh workflow run docker.yml \
-  --ref main \
-  -f paseo_version=0.1.102-beta.1 \
-  -f publish=true
+node scripts/fork-release-version.mjs --ref HEAD
 ```
 
-Manual Docker publishes require an explicit `paseo_version`. The workflow builds
-from the checked-out source tree and publishes only the exact prerelease image
-tag for prerelease versions.
-
-The published image is multi-arch for `linux/amd64` and `linux/arm64`.
+The fork does not publish npm, Desktop, Android/iOS/EAS, Nix, website, or relay
+build artifacts. Those upstream release paths are not part of this repository's
+release contract.
 
 ## Troubleshooting
 
@@ -235,5 +238,5 @@ The published image is multi-arch for `linux/amd64` and `linux/arm64`.
   runtime where the binary is on `PATH`.
 - **Permission errors in `/workspace`**: make the mounted directory writable by
   uid/gid `1000:1000`, or run the container as the host uid/gid.
-- **Logs**: inspect `docker logs paseo` or
-  `/home/paseo/.paseo/daemon.log` inside the container.
+- **Logs**: inspect `docker logs paseo` or `/home/paseo/.paseo/daemon.log` inside
+  the container.

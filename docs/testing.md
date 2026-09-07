@@ -128,9 +128,12 @@ npm run build:desktop -- --publish never --linux --x64 --dir
 
 electron-builder packs `node_modules` by walking declared production `dependencies`. A package that imports something it only lists as a `peerDependency` resolves fine in this hoisted workspace, passes every test, and then throws `ERR_MODULE_NOT_FOUND` inside `app.asar` — killing the desktop daemon at startup. That shipped twice from `@replit/codemirror-lang-*` grammars, which are interactive editor extensions published as if they were bare parsers.
 
-The packaged smoke catches it but only runs when a PR touches the `desktop` filter in `.github/ci-paths.yml`. Both offenders landed under `packages/highlight/**`, which maps to `sdk`.
-
-`packages/highlight/src/__tests__/dependency-closure.test.ts` replicates the packer's traversal statically and runs with the normal unit tests. It is scoped to `@getpaseo/highlight` on purpose: that tree is small and pure, so the check is exact. Running the same walk over `@getpaseo/server` produces dozens of false positives from optional dependencies loaded behind `try`/`catch`.
+`packages/highlight/src/__tests__/dependency-closure.test.ts` replicates the
+packer's traversal statically and runs with the normal unit tests. It is scoped
+to `@getpaseo/highlight` because that tree is small and pure; the check remains
+useful locally even though this fork's Actions build Docker only. Running the
+same walk over `@getpaseo/server` produces false positives from optional
+dependencies loaded behind `try`/`catch`.
 
 Prefer a `@lezer/*` grammar. When a language only ships inside an editor extension, vendor the grammar into `packages/highlight/src/<lang>/` — see `svelte/`, `nix/`, and `csharp/`.
 
@@ -194,13 +197,14 @@ Test suites in this repo are heavy. Running them in bulk freezes the machine, es
 - Teardown kills the process tree, because a Windows signal reaches only the direct child and leaves forked workers holding the listening port.
 - The `asdf`-backed local Elixir relay stays POSIX-only, so the `relay-deployment` Playwright project is unavailable on Windows.
 
-## Pull-request test routing
+## Pull-request verification
 
-PR checks are routed by the behavior each suite proves, using `.github/ci-paths.yml`. A package does not inherit every test suite of its runtime consumers: app changes do not run CLI or Electron-wrapper tests, and protocol changes do not run every package that imports the protocol. Cross-package static compatibility belongs to `typecheck`; full integration coverage runs after merge on main and in manual CI runs.
-
-Required matrix legs are declared as statically named jobs. Their shared steps use YAML anchors, while job-level `if` conditions let GitHub report an unaffected leg as genuinely skipped without allocating a runner or losing the exact required-check name.
-
-The smallest meaningful contract wins over package ownership. Tiny structural invariants such as daemon launch supervision run unconditionally in the always-running routing job instead of maintaining a transitive file list; this check reads source entrypoints and builds no product. Routed integration contracts use stable domain directories. Browser changes select the required Playwright shards; desktop changes select the existing required desktop jobs, with renderer, real-Electron, and packaged-app coverage together in the Ubuntu leg. CLI-side Hub changes select one focused test inside the existing required server jobs. Repository scripts and the shared Vitest configuration run every PR contract because they are cross-cutting toolchain inputs.
+This fork has one GitHub Actions build contract: the Docker workflow builds a
+native `linux/amd64` image on the self-hosted GARM runner for trusted
+same-repository pull requests. Pull requests from other repositories are not
+executed on that runner. Run the focused unit, browser, or integration test for
+the behavior you changed; the fork workflow does not replace local test
+coverage.
 
 ## Agent authentication in tests
 

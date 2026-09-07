@@ -1,11 +1,11 @@
-# Example child image that adds agent CLIs to the official Paseo image.
+# Example child image that adds agent CLIs to the Paseo fork image.
 #
 # Build:
 #   docker build -f docker/Dockerfile.agents.example -t paseo-with-agents .
 #
 # Then set `image: paseo-with-agents` in docker/docker-compose.example.yml.
 
-FROM ghcr.io/getpaseo/paseo:latest
+FROM ghcr.io/mouriya-s-lab/paseo:latest
 
 USER root
 RUN npm install -g \
