@@ -5,13 +5,19 @@ This directory contains the Paseo fork daemon image.
 The image runs the daemon headless and serves the bundled web UI from the same
 HTTP origin. Start it, then open the daemon URL in a browser.
 
+The image lives in the private registry — log in first. The Docker password is a short-lived Keycloak access token (refreshed by your deployment plane, ~30 min TTL):
+
+```bash
+echo "$REGISTRY_TOKEN" | docker login registry.237575.xyz -u sa-registry --password-stdin
+```
+
 ```bash
 docker run -d --name paseo \
   -p 6767:6767 \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
-  ghcr.io/mouriya-s-lab/paseo:latest
+  registry.237575.xyz/paseo/paseo:latest
 ```
 
 Then open `http://localhost:6767`.
@@ -20,7 +26,7 @@ The base image intentionally does not bundle agent CLIs. Extend it with the
 agents you use:
 
 ```Dockerfile
-FROM ghcr.io/mouriya-s-lab/paseo:latest
+FROM registry.237575.xyz/paseo/paseo:latest
 
 USER root
 RUN npm install -g @openai/codex @anthropic-ai/claude-code

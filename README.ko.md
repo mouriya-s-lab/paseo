@@ -88,13 +88,19 @@ Paseo가 로컬에서 시작된 뒤 기기 페어링을 위한 종단 간 암호
 
 Docker에서 Paseo 데몬과 셀프 호스팅 웹 UI를 실행하세요:
 
+이미지는 프라이빗 레지스트리에 있습니다 — 먼저 로그인하세요. Docker 비밀번호는 단기 Keycloak 액세스 토큰입니다(배포 플레인이 갱신, 약 30분 유효):
+
+```bash
+echo "$REGISTRY_TOKEN" | docker login registry.237575.xyz -u sa-registry --password-stdin
+```
+
 ```bash
 docker run -d --name paseo \
   -p 6767:6767 \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
-  ghcr.io/mouriya-s-lab/paseo:latest
+  registry.237575.xyz/paseo/paseo:latest
 ```
 
 컨테이너가 시작되면 `http://localhost:6767`을 여세요. 사용하는 에이전트 CLI를 기본 이미지에 추가한 뒤, 환경 변수나 영구 `/home/paseo` 볼륨으로 인증 정보를 설정하세요. 자세한 내용은 [Docker 문서](docs/docker.md)를 참고하세요.

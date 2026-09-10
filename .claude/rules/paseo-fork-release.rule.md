@@ -18,8 +18,9 @@ alwaysApply: true
 - `.github/workflows/docker.yml` 在自有 GARM runner 上执行唯一的构建发布路径：同仓库 PR 只构建不推送；`main` push、每小时 upstream tag 检查和 `main` 上的手动 dispatch 执行发布。
 - workflow 从当前 `main` 可达的最高 upstream `vX.Y.Z` 或 prerelease tag 解析基础版本；root `package.json` 必须与该基础版本一致。
 - upstream 基础版本使用 `vX.Y.Z-fork.N`，`N` 从 `0` 开始；同一 commit 重试复用已有 fork tag，其他 fork commit 使用该基础版本的最大后缀加一。
-- 稳定基础版本同时发布 `ghcr.io/mouriya-s-lab/paseo:X.Y.Z-fork.N` 和 `latest`；prerelease 只发布精确版本镜像，不移动 `latest`。
+- 稳定基础版本同时发布 `registry.237575.xyz/paseo/paseo:X.Y.Z-fork.N` 和 `latest`；prerelease 只发布精确版本镜像，不移动 `latest`。
 - 镜像构建成功后才创建并推送 fork tag；失败时不留下未构建的 release tag。
+- registry 登录用短时 Keycloak token 经 `sa-registry` 登录；`KEYCLOAK_REGISTRY_CLIENT_SECRET` 由 IaC 同步到仓库 secret，禁止手写、粘贴或提交。
 - 不运行上游的 npm、Desktop、Android、EAS、Nix、网站或 relay release 命令；Docker 之外的 Actions 已移除。
 
 ## Fork 代码放置

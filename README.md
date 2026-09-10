@@ -88,13 +88,19 @@ For full setup and configuration, see:
 
 Run the Paseo daemon and self-hosted web UI in Docker:
 
+The image lives in the private registry — log in first. The Docker password is a short-lived Keycloak access token (refreshed by your deployment plane, ~30 min TTL):
+
+```bash
+echo "$REGISTRY_TOKEN" | docker login registry.237575.xyz -u sa-registry --password-stdin
+```
+
 ```bash
 docker run -d --name paseo \
   -p 6767:6767 \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
-  ghcr.io/mouriya-s-lab/paseo:latest
+  registry.237575.xyz/paseo/paseo:latest
 ```
 
 Open `http://localhost:6767` after it starts. Extend the base image with the agent CLIs you use, then provide credentials through environment variables or the persistent `/home/paseo` volume. See the [Docker documentation](docs/docker.md) for full setup details.
