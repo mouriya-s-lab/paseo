@@ -128,7 +128,7 @@ jobs:
         if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
         run: echo "${{ steps.registry-token.outputs.access-token }}" | docker login "$REGISTRY" -u sa-registry --password-stdin
 
-      - name: Build and publish Docker image
+      - name: Build Docker image
         if: steps.values.outputs.skip != 'true'
         uses: docker/build-push-action@v7
         with:
@@ -143,10 +143,25 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          push: ${{ steps.values.outputs.push == 'true' }}
+          push: false
+          load: ${{ steps.values.outputs.push == 'true' }}
           provenance: false
           cache-from: type=gha,scope=paseo-fork
           cache-to: type=gha,scope=paseo-fork,mode=max
+
+      # Push runs in dockerd (LXD netns, /etc/hosts mesh override) instead of
+      # the buildkit builder container (embedded DNS resolves the public IP,
+      # which OVH does not hairpin). Same shape as runner-canary publish.
+      - name: Push image to private registry
+        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
+        env:
+          TAGS: ${{ steps.values.outputs.tags }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            test -n "$tag"
+            docker push "$tag"
+          done <<< "$TAGS"
 
       - name: Verify published image
         if: github.event_name != 'pull_request' && steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
