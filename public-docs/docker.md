@@ -10,7 +10,13 @@ category: Getting started
 
 The Paseo fork Docker image runs the daemon and serves the bundled browser UI from the same HTTP origin. It is meant for servers, dev boxes, NAS devices, homelab hosts, and other places where you want Paseo running without the desktop app.
 
-Docker images follow the fork's upstream-based release cadence. `ghcr.io/mouriya-s-lab/paseo:latest` points at the latest stable fork release.
+Docker images follow the fork's upstream-based release cadence. `registry.237575.xyz/paseo/paseo:latest` points at the latest stable fork release.
+
+The image lives in the private registry — log in first. The Docker password is a short-lived Keycloak access token (refreshed by your deployment plane, ~30 min TTL):
+
+```bash
+echo "$REGISTRY_TOKEN" | docker login registry.237575.xyz -u sa-registry --password-stdin
+```
 
 ```bash
 docker run -d --name paseo \
@@ -18,7 +24,7 @@ docker run -d --name paseo \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
-  ghcr.io/mouriya-s-lab/paseo:latest
+  registry.237575.xyz/paseo/paseo:latest
 ```
 
 Then open:
@@ -46,7 +52,7 @@ The image does not bundle agent CLIs such as Claude Code, Codex, OpenCode, Copil
 ```yaml
 services:
   paseo:
-    image: ghcr.io/mouriya-s-lab/paseo:latest
+    image: registry.237575.xyz/paseo/paseo:latest
     container_name: paseo
     restart: unless-stopped
     ports:
@@ -70,7 +76,7 @@ docker compose up -d
 Create a child image for the providers you want available:
 
 ```Dockerfile
-FROM ghcr.io/mouriya-s-lab/paseo:latest
+FROM registry.237575.xyz/paseo/paseo:latest
 
 USER root
 RUN npm install -g @openai/codex @anthropic-ai/claude-code opencode-ai
