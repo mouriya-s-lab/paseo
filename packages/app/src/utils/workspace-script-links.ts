@@ -44,6 +44,10 @@ function buildDirectServiceUrl(
   if (activeConnection?.type !== "directTcp") {
     return `http://localhost:${port}`;
   }
+  if (activeConnection.basePath !== undefined) {
+    return null;
+  }
+  const protocol = activeConnection.useTls ? "https" : "http";
   try {
     const { host, isIpv6 } = parseHostPort(activeConnection.endpoint);
     let base = host;
@@ -52,9 +56,9 @@ function buildDirectServiceUrl(
     } else if (isIpv6) {
       base = `[${host}]`;
     }
-    return `http://${base}:${port}`;
+    return `${protocol}://${base}:${port}`;
   } catch {
-    return `http://localhost:${port}`;
+    return `${protocol}://localhost:${port}`;
   }
 }
 

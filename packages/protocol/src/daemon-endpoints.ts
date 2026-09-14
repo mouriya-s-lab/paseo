@@ -164,13 +164,27 @@ export function deriveLabelFromEndpoint(endpoint: string): string {
 
 export interface WebSocketUrlOptions {
   useTls: boolean;
+  basePath?: string;
+}
+
+const PROXY_BASE_PATH_PATTERN = /^\/daemons\/[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+function resolveWebSocketPath(basePath: string | undefined): string {
+  if (basePath === undefined) {
+    return "/ws";
+  }
+  if (!PROXY_BASE_PATH_PATTERN.test(basePath)) {
+    throw new Error("Invalid proxy base path");
+  }
+  return `${basePath}/ws`;
 }
 
 export function buildDaemonWebSocketUrl(endpoint: string, opts: WebSocketUrlOptions): string {
   const { host, port, isIpv6 } = parseHostPort(endpoint);
   const protocol = opts.useTls ? "wss" : "ws";
   const hostPart = isIpv6 ? `[${host}]` : host;
-  return new URL(`${protocol}://${hostPart}:${port}/ws`).toString();
+  const websocketPath = resolveWebSocketPath(opts.basePath);
+  return new URL(`${protocol}://${hostPart}:${port}${websocketPath}`).toString();
 }
 
 export function buildRelayWebSocketUrl(params: {

@@ -4,6 +4,7 @@ import {
 } from "@getpaseo/protocol/daemon-endpoints";
 import {
   DirectTcpHostConnectionSchema,
+  ProxyBasePathSchema,
   type DirectTcpHostConnection,
 } from "@getpaseo/protocol/host-connection-schema";
 import {
@@ -128,6 +129,7 @@ function hostConnectionEquals(left: HostConnection, right: HostConnection): bool
     return (
       left.endpoint === right.endpoint &&
       (left.useTls ?? false) === (right.useTls ?? false) &&
+      left.basePath === right.basePath &&
       left.password === right.password
     );
   }
@@ -351,12 +353,15 @@ export function createRemoteSshHostConnection(input: {
   };
 }
 
+const SELF_HOSTED_CONNECTION_ID_PATTERN = /^selfhosted:([a-z0-9]+(?:-[a-z0-9]+)*)$/u;
+
 const StoredHostConnectionSchema = z.discriminatedUnion("type", [
   z.strictObject({
     id: z.string().optional(),
     type: z.literal("directTcp"),
     endpoint: z.string(),
     useTls: z.boolean().optional(),
+    basePath: ProxyBasePathSchema.optional(),
     password: z.string().optional(),
   }),
   z.strictObject({
@@ -397,20 +402,39 @@ const StoredHostProfileSchema = z.strictObject({
 export const StoredHostRegistrySchema = z.array(StoredHostProfileSchema);
 type StoredHostConnection = z.infer<typeof StoredHostConnectionSchema>;
 
-function normalizeStoredConnection(connection: StoredHostConnection): HostConnection | null {
-  if (connection.type === "directTcp") {
-    try {
-      const endpoint = normalizeLoopbackToLocalhost(normalizeHostPort(connection.endpoint));
-      return DirectTcpHostConnectionSchema.parse({
-        id: `direct:${endpoint}`,
-        type: "directTcp",
-        endpoint,
-        useTls: connection.useTls,
-        ...(connection.password !== undefined ? { password: connection.password } : {}),
-      });
-    } catch {
+type StoredDirectTcpConnection = Extract<StoredHostConnection, { type: "directTcp" }>;
+
+function normalizeStoredDirectTcpConnection(
+  connection: StoredDirectTcpConnection,
+): HostConnection | null {
+  try {
+    const endpoint = normalizeLoopbackToLocalhost(normalizeHostPort(connection.endpoint));
+    const storedId = connection.id?.trim() ?? "";
+    const managedMatch = storedId.match(SELF_HOSTED_CONNECTION_ID_PATTERN);
+    if (
+      (storedId.startsWith("selfhosted:") && !managedMatch) ||
+      (connection.basePath !== undefined && !managedMatch) ||
+      (managedMatch && connection.basePath !== `/daemons/${managedMatch[1]}`)
+    ) {
       return null;
     }
+    const id = managedMatch?.[0] ?? `direct:${endpoint}`;
+    return DirectTcpHostConnectionSchema.parse({
+      id,
+      type: "directTcp",
+      endpoint,
+      useTls: connection.useTls,
+      ...(connection.basePath !== undefined ? { basePath: connection.basePath } : {}),
+      ...(connection.password !== undefined ? { password: connection.password } : {}),
+    });
+  } catch {
+    return null;
+  }
+}
+
+function normalizeStoredConnection(connection: StoredHostConnection): HostConnection | null {
+  if (connection.type === "directTcp") {
+    return normalizeStoredDirectTcpConnection(connection);
   }
   if (connection.type === "directSocket") {
     const path = connection.path.trim();

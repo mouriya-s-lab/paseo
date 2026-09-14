@@ -33,7 +33,13 @@ Configuration and local state live under `PASEO_HOME` (defaults to `~/.paseo`).
 
 ## Docker
 
-For servers, dev boxes, NAS devices, or homelab hosts, run the official image:
+For servers, dev boxes, NAS devices, or homelab hosts, run the fork image:
+
+The image lives in the private registry — log in first. The Docker password is a short-lived Keycloak access token (refreshed by your deployment plane, ~30 min TTL):
+
+```bash
+echo "$REGISTRY_TOKEN" | docker login registry.237575.xyz -u sa-registry --password-stdin
+```
 
 ```bash
 docker run -d --name paseo \
@@ -41,7 +47,7 @@ docker run -d --name paseo \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
-  ghcr.io/getpaseo/paseo:latest
+  registry.237575.xyz/paseo/paseo:latest
 ```
 
 Then open `http://localhost:6767`.

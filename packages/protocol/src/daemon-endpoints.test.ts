@@ -94,6 +94,21 @@ describe("daemon websocket URLs", () => {
       "wss://example.com:6767/ws",
     );
   });
+
+  test("includes a validated proxy base path", () => {
+    expect(
+      buildDaemonWebSocketUrl("example.com:443", {
+        useTls: true,
+        basePath: "/daemons/alpha",
+      }),
+    ).toBe("wss://example.com/daemons/alpha/ws");
+    expect(() =>
+      buildDaemonWebSocketUrl("example.com:443", {
+        useTls: true,
+        basePath: "/daemons/Alpha",
+      }),
+    ).toThrow("Invalid proxy base path");
+  });
 });
 
 describe("relay websocket URL versioning", () => {
