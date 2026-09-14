@@ -201,11 +201,12 @@ docker build -f docker/base/Dockerfile -t paseo:local .
 To assert the source tree version while building:
 
 ```bash
+version="$(node -p "require('./package.json').version")"
 docker build \
-  --build-arg PASEO_VERSION=0.7.2 \
+  --build-arg "PASEO_VERSION=${version}" \
   --build-arg EXPO_PUBLIC_PASEO_SELFHOSTED=false \
   --build-arg EXPO_PUBLIC_LOCAL_DAEMON=self-hosted \
-  -t paseo:0.7.2 \
+  -t "paseo:${version}" \
   -f docker/base/Dockerfile \
   .
 ```

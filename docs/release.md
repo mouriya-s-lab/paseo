@@ -72,8 +72,9 @@ when no valid upstream release tag is reachable from the selected commit.
 Use the same Dockerfile and build-time settings as Actions:
 
 ```bash
+version="$(node -p "require('./package.json').version")"
 docker build \
-  --build-arg PASEO_VERSION=0.7.2 \
+  --build-arg "PASEO_VERSION=${version}" \
   --build-arg EXPO_PUBLIC_PASEO_SELFHOSTED=false \
   --build-arg EXPO_PUBLIC_LOCAL_DAEMON=self-hosted \
   -f docker/base/Dockerfile \
