@@ -20,6 +20,8 @@ the web UI. The Docker build sets `EXPO_PUBLIC_LOCAL_DAEMON=self-hosted`, so
 the browser can use the page host as its direct TCP endpoint. API and WebSocket
 requests still require `PASEO_PASSWORD` when one is configured.
 
+Host-side CLI commands select the container explicitly, for example `paseo project ls --host 127.0.0.1:6767`. Without an endpoint selector the CLI looks for a local home's supervisor. Container environment settings are deployment overrides; worker restart preserves them. Your container manager owns full supervisor replacement.
+
 ## Quick start
 
 The image lives in the private registry — log in first. The Docker password is a short-lived Keycloak access token (refreshed by your deployment plane, ~30 min TTL):

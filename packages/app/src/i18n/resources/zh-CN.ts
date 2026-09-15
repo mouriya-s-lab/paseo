@@ -12,6 +12,7 @@ export const zhCN: TranslationResources = {
       copy: "复制",
       copyLine: "复制行",
       dismiss: "关闭",
+      reload: "重新加载",
       retry: "重试",
       search: "搜索",
       select: "选择",
@@ -153,7 +154,7 @@ export const zhCN: TranslationResources = {
       initialPromptRequired: "初始 prompt 必填",
       alreadyLoading: "正在加载",
       uploadFailed: "Failed to upload file",
-      noClipboardImage: "剪贴板中没有图片",
+      noClipboardImage: "当前剪贴板中没有图片。请尝试通过键盘粘贴。",
       pasteImageFailed: "无法粘贴图片",
       fileTooLarge: "{{fileName}} is too large (max {{size}})",
     },
@@ -208,6 +209,10 @@ export const zhCN: TranslationResources = {
     historyLoadFailed: "无法加载智能体历史记录",
     messageCapped: "此消息已被截断（{{bytes}} 字节）。",
     permission: {
+      rejectedPlan: "已拒绝的计划",
+      approvedPlan: "已批准的计划",
+      canceledPlan: "已取消的计划",
+
       plan: "Plan",
       required: "需要权限",
       deny: "拒绝",
@@ -221,7 +226,8 @@ export const zhCN: TranslationResources = {
     states: {
       notFound: "未找到 Agent",
       failedToLoad: "加载 Agent 失败",
-      reconnecting: "正在重连",
+      reconnecting: "正在重新连接主机",
+      updating: "正在更新消息",
       timelineSyncFailed: "无法刷新代理历史记录。",
       timelineSyncRetrying: "正在重试…",
       archivingTitle: "正在归档 Agent...",
@@ -871,6 +877,9 @@ export const zhCN: TranslationResources = {
         openChangesTab: "打开“更改”标签页",
         openDiffTab: "打开 Diff 标签页",
         closeChangesTab: "关闭“更改”标签页",
+        jumpToFile: {
+          title: "跳转到文件",
+        },
         binaryFile: "二进制文件",
         tooLarge: "Diff 过大，无法显示",
         previewTooLargeTitle: "此 diff 过大，无法预览",
@@ -1032,6 +1041,16 @@ export const zhCN: TranslationResources = {
       deleteMessage_other: "这会从此主机的{{count}}个工作区中移除该标签。",
       offline: "此主机离线。",
       updateHost: "请更新此主机以管理标签。",
+    },
+  },
+  changelog: {
+    title: "新功能",
+    installed: "已安装",
+    showMore: "显示更多",
+    openWebsite: "完整更新日志",
+    error: {
+      title: "无法加载更新日志",
+      description: "请检查网络连接后重试。",
     },
   },
   sidebar: {
@@ -1252,6 +1271,7 @@ export const zhCN: TranslationResources = {
       detail: "正在停止本地 daemon。",
     },
     daemon: {
+      lifecycle: en.desktop.daemon.lifecycle,
       title: "Daemon",
       status: {
         title: "状态",
@@ -2043,6 +2063,7 @@ export const zhCN: TranslationResources = {
     about: {
       title: "关于",
       appVersion: "应用版本",
+      whatsNewHint: "每个版本的发布说明",
       thisDevice: "此设备",
       connectedHosts: "已连接的 Host",
       offline: "离线",
