@@ -149,9 +149,13 @@ jobs:
           cache-from: type=gha,scope=paseo-fork
           cache-to: type=gha,scope=paseo-fork,mode=max
 
-      # Push runs in dockerd (LXD netns, /etc/hosts mesh override) instead of
-      # the buildkit builder container (embedded DNS resolves the public IP,
-      # which OVH does not hairpin). Same shape as runner-canary publish.
+      # Push from the runner's Docker daemon: registry-mesh-hosts.sh writes the
+      # registry mesh override into the runner instance's /etc/hosts. BuildKit's
+      # builder container instead resolves the public IP via embedded DNS; the
+      # resident runner on OVH cannot hairpin to it.
+      # GARM self-hosted runners use resident LXD on VM 181 or edge Incus on the
+      # operator's laptop; mesh reachability comes from that host's NetBird peer.
+      # See https://github.com/mouriya-s-lab/pve-vctcn/blob/main/apps/runner/README.md#边缘-incus-providergarm-edge-incus
       - name: Push image to private registry
         if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
         env:
