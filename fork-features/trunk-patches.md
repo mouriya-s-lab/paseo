@@ -46,23 +46,14 @@ Verification for each rebase:
 
 The fork publishes Docker only, so upstream automation for npm, Nix, relay,
 website, Desktop, Android/EAS, release-note synchronization, and path filtering
-is intentionally absent. Recheck these deletions after an upstream sync; do not
-restore them unless the fork release boundary changes.
+is intentionally absent. The deleted paths are the `fork-deleted` rows in
+[`ownership.tsv`](ownership.tsv). Do not restore them unless the fork release
+boundary changes.
 
-Deleted workflow/config files:
-
-- `.github/ci-paths.yml`
-- `.github/workflows/ci.yml`
-- `.github/workflows/nix.yml`
-- `.github/workflows/nix-update-hash.yml`
-- `.github/workflows/release-notes-sync.yml`
-- `.github/workflows/deploy-relay.yml`
-- `.github/workflows/deploy-website.yml`
-- `.github/workflows/desktop-release.yml`
-- `.github/workflows/desktop-rollout.yml`
-- `.github/workflows/android-apk-release.yml`
-- `.github/workflows/deploy-app.yml`
-- `packages/app/.eas/workflows/release-ios-beta.yml`
-- `packages/app/.eas/workflows/release-mobile.yml`
-- `packages/app/.eas/workflows/resubmit-ios-review.yml`
-- `scripts/ci-workflow.test.mjs`
+`.github/workflows/sync-upstream.yml` plans each sync with
+[`upstream-sync/sync-merge.mjs`](upstream-sync/sync-merge.mjs), which reads
+those rows from the fork base. When upstream edits a `fork-deleted` path, the
+sync merge keeps it deleted. Any other conflict goes to the review PR. So does
+any `.github/workflows/` file that upstream adds and the fork base lacks: when
+you review it, either delete it and add a `fork-deleted` row, or keep it as a
+fork-owned workflow.
