@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultHostAppearance } from "@/hosts/appearance";
-import type { HostProfile } from "@/types/host-connection";
+import { normalizeStoredHostProfile, type HostProfile } from "@/types/host-connection";
 import {
   parseSelfHostedManifest,
   readSelfHostedLocalDaemonOverride,
@@ -127,5 +127,31 @@ describe("self-hosted runtime fork", () => {
       storedDirectTcpConnectionId({ id: "selfhosted:Bad_Id", basePath: "/daemons/x", endpoint }),
     ).toBeNull();
     expect(storedDirectTcpConnectionId({ basePath: "/daemons/alpha", endpoint })).toBeNull();
+  });
+
+  it("keeps a stored managed connection's basePath while moving its legacy password to the profile", () => {
+    const profile = normalizeStoredHostProfile({
+      serverId: "server-1",
+      connections: [
+        {
+          id: "selfhosted:alpha",
+          type: "directTcp",
+          endpoint: "proxy.example:443",
+          useTls: true,
+          basePath: "/daemons/alpha",
+          password: "old-secret",
+        },
+      ],
+    });
+    expect(profile?.password).toBe("old-secret");
+    expect(profile?.connections).toEqual([
+      {
+        id: "selfhosted:alpha",
+        type: "directTcp",
+        endpoint: "proxy.example:443",
+        useTls: true,
+        basePath: "/daemons/alpha",
+      },
+    ]);
   });
 });

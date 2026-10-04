@@ -47,6 +47,7 @@ fork-features/upstream-sync/sync-merge.test.mjs	fork-owned	Planner coverage agai
 .github/workflows/desktop-release.yml	fork-deleted	Desktop release; the fork publishes Docker only
 .github/workflows/desktop-rollout.yml	fork-deleted	Desktop rollout; the fork publishes Docker only
 .github/workflows/android-apk-release.yml	fork-deleted	Android release; the fork publishes Docker only
+.github/workflows/desktop-packages.yml	fork-deleted	Desktop packaging on GitHub-hosted runners; the fork publishes Docker only
 .github/workflows/deploy-app.yml	fork-deleted	EAS app deployment; the fork publishes Docker only
 packages/app/.eas/workflows/release-ios-beta.yml	fork-deleted	EAS iOS beta release; the fork publishes Docker only
 packages/app/.eas/workflows/release-mobile.yml	fork-deleted	EAS mobile release; the fork publishes Docker only

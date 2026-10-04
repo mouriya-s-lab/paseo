@@ -169,8 +169,7 @@ function managedConnectionEquals(
     left.id === right.id &&
     left.endpoint === right.endpoint &&
     (left.useTls ?? false) === (right.useTls ?? false) &&
-    left.basePath === right.basePath &&
-    left.password === right.password
+    left.basePath === right.basePath
   );
 }
 
