@@ -38,7 +38,10 @@ jobs:
       (github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository) &&
       (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
-    runs-on: [self-hosted, linux, vctcn, netbird, x64]
+    # `cachyos` exists only on the edge Incus pool (CachyOS laptop, 30 GiB). The
+    # resident VM 181 LXD runners share 4 GiB, which OOM-kills `expo export`
+    # (paseo#20, pve-vctcn#300).
+    runs-on: [self-hosted, linux, vctcn, netbird, x64, cachyos]
     permissions:
       contents: write
     steps:

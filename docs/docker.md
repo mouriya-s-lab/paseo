@@ -217,8 +217,7 @@ docker build \
 
 The fork's only GitHub Actions build is
 [`.github/workflows/docker.yml`](../.github/workflows/docker.yml). It runs on
-the self-hosted GARM labels `self-hosted`, `linux`, `vctcn`, `netbird`, and
-`x64`.
+the GARM edge runner described in [release.md](release.md#automatic-release).
 
 - Same-repository pull requests build a native `linux/amd64` image without pushing.
 - Every `main` push and the hourly schedule resolve the highest reachable upstream release tag.

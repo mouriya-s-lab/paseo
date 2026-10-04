@@ -22,7 +22,12 @@ packing workspaces.
 
 [`.github/workflows/docker.yml`](../.github/workflows/docker.yml) is the only
 release workflow. It runs on the self-hosted GARM runner with labels
-`self-hosted`, `linux`, `vctcn`, `netbird`, and `x64`.
+`self-hosted`, `linux`, `vctcn`, `netbird`, `x64`, and `cachyos`. Only the
+edge Incus pool on the CachyOS laptop carries `cachyos`, so the build never
+lands on the resident VM 181 runners: they share 4 GiB, and
+`expo export --platform web` is OOM-killed there. A job waits in the queue
+while the edge pool is disabled. The label is owned by
+[pve-vctcn `apps/runner`](https://github.com/mouriya-s-lab/pve-vctcn/tree/main/apps/runner).
 
 - A same-repository pull request builds a native `linux/amd64` image without
   logging in or pushing.
