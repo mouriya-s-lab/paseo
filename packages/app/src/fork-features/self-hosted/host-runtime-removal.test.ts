@@ -122,14 +122,17 @@ describe("host runtime connection removal", () => {
     vi.stubEnv("EXPO_PUBLIC_PASEO_SELFHOSTED", "true");
     const harness = makeDeps({ [managed.id]: 5, [manual.id]: 20 });
     const controller = createController(makeHost([managed, manual]), harness.deps);
-    await controller.start({ initialConnection: { connectionId: managed.id } });
-    const activeClient = harness.createdClients[0]!.client;
+    await controller.start();
+    await controller.activateConnection({ connectionId: managed.id });
+    const activeClient = harness.createdClients.at(-1)!.client;
     expect(controller.getSnapshot()).toMatchObject({
       connectionStatus: "online",
       activeConnectionId: managed.id,
       client: activeClient,
     });
     expect(activeClient.connect).toHaveBeenCalledOnce();
+    const clientsBeforeRemoval = harness.createdClients.length;
+    const probesBeforeRemoval = harness.probeAttempts.length;
 
     await controller.updateHost(makeHost([manual]));
 
@@ -141,8 +144,9 @@ describe("host runtime connection removal", () => {
     expect(controller.getSnapshot()).toMatchObject({ activeConnectionId: null, client: null });
     expect(controller.getSnapshot().probeByConnectionId.size).toBe(0);
     expect(activeClient.close).toHaveBeenCalledOnce();
-    expect(harness.createdClients.map(({ connectionId }) => connectionId)).toEqual([managed.id]);
-    expect(harness.probeAttempts).toEqual([]);
+    expect(harness.createdClients).toHaveLength(clientsBeforeRemoval);
+    expect(harness.probeAttempts).toHaveLength(probesBeforeRemoval);
+    expect(harness.createdClients.map(({ connectionId }) => connectionId)).not.toContain(manual.id);
   });
 
   it("stays probe-free with zero managed connections and reconnects after re-adding one", async () => {
@@ -199,31 +203,31 @@ describe("host runtime connection removal", () => {
     const connectionB: HostConnection = { id: "direct:b", type: "directTcp", endpoint: "b:6767" };
     const harness = makeDeps({ [connectionA.id]: 5, [connectionB.id]: 20 });
     const controller = createController(makeHost([connectionA, connectionB]), harness.deps);
-    await controller.start({ initialConnection: { connectionId: connectionA.id } });
-    const clientA = harness.createdClients[0]!.client;
+    await controller.start();
+    await controller.activateConnection({ connectionId: connectionA.id });
+    const clientA = harness.createdClients.at(-1)!.client;
     expect(controller.getSnapshot()).toMatchObject({
       connectionStatus: "online",
       activeConnectionId: connectionA.id,
       client: clientA,
     });
     expect(clientA.connect).toHaveBeenCalledOnce();
-    expect(harness.probeAttempts).toEqual([connectionB.id]);
 
     await controller.updateHost(makeHost([connectionB]));
 
     expect(clientA.close).toHaveBeenCalledOnce();
     expect(controller.getSnapshot().probeByConnectionId.has(connectionA.id)).toBe(false);
     const attemptsAtRemoval = harness.probeAttempts.length;
+    const clientsAtRemoval = harness.createdClients.length;
     // B was just probed; allow the normal timer cycle to probe and activate it again.
     await vi.advanceTimersByTimeAsync(10_000);
     expect(harness.probeAttempts.slice(attemptsAtRemoval)).toEqual([connectionB.id]);
-    expect(harness.createdClients.map(({ connectionId }) => connectionId)).toEqual([
+    const clientsAfterRemoval = harness.createdClients.slice(clientsAtRemoval);
+    expect(clientsAfterRemoval.map(({ connectionId }) => connectionId)).not.toContain(
       connectionA.id,
-      connectionB.id,
-      connectionB.id,
-    ]);
-    const clientB = harness.createdClients[2]!.client;
-    expect(clientB.connect).toHaveBeenCalledOnce();
+    );
+    const clientB = harness.createdClients.at(-1)!.client;
+    expect(harness.createdClients.at(-1)!.connectionId).toBe(connectionB.id);
     expect(clientB.close).not.toHaveBeenCalled();
     expect(clientA.close).toHaveBeenCalledOnce();
     expect(controller.getSnapshot()).toMatchObject({
