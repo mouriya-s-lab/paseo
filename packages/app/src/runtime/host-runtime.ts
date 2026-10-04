@@ -1190,8 +1190,9 @@ export class HostRuntimeController {
     }
   }
 
-  // Fork: the self-hosted manifest can remove the active connection. Close it and drop
-  // probe state for every removed connection so the probe cycle never selects them.
+  // Fork: the self-hosted manifest can remove the active connection. Invalidate the in-flight
+  // probe cycle (its results may name removed connections), close a removed active client, and
+  // drop probe state for every removed connection so no later cycle selects them.
   private async forgetRemovedConnections(previousHost: HostProfile): Promise<void> {
     const currentIds = new Set(this.host.connections.map((connection) => connection.id));
     const removedIds = previousHost.connections
@@ -1200,6 +1201,8 @@ export class HostRuntimeController {
     if (removedIds.length === 0) {
       return;
     }
+    this.probeRequestVersion += 1;
+    await this.probeCycleInFlight;
     const probeByConnectionId = new Map(this.snapshot.probeByConnectionId);
     for (const id of removedIds) {
       probeByConnectionId.delete(id);

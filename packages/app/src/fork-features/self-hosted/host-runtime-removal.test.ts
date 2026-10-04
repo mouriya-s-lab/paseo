@@ -239,4 +239,79 @@ describe("host runtime connection removal", () => {
       connectionB.id,
     ]);
   });
+
+  it("discards a successful in-flight probe for a connection removed before it resolves", async () => {
+    vi.stubEnv("EXPO_PUBLIC_PASEO_SELFHOSTED", "false");
+    const connectionA: HostConnection = { id: "direct:a", type: "directTcp", endpoint: "a:6767" };
+    const connectionB: HostConnection = { id: "direct:b", type: "directTcp", endpoint: "b:6767" };
+    const harness = makeDeps({ [connectionA.id]: 5, [connectionB.id]: 20 });
+    let resolveProbeA!: () => void;
+    const probeADeferred = new Promise<void>((resolve) => {
+      resolveProbeA = resolve;
+    });
+    const connectToDaemon = harness.deps.connectToDaemon;
+    harness.deps.connectToDaemon = async (input) => {
+      if (input.connection.id === connectionB.id) {
+        harness.probeAttempts.push(connectionB.id);
+        throw new Error("connection B is unavailable");
+      }
+      const result = await connectToDaemon(input);
+      await probeADeferred;
+      return result;
+    };
+    const controller = createController(makeHost([connectionA, connectionB]), harness.deps);
+    const activeConnectionIds: Array<string | null> = [controller.getSnapshot().activeConnectionId];
+    const adoptedClients: Array<DaemonClient | null> = [controller.getSnapshot().client];
+    const probeIdsAfterRemoval: string[][] = [];
+    let removalResolved = false;
+    controller.subscribe(() => {
+      const snapshot = controller.getSnapshot();
+      activeConnectionIds.push(snapshot.activeConnectionId);
+      adoptedClients.push(snapshot.client);
+      if (removalResolved) {
+        probeIdsAfterRemoval.push(Array.from(snapshot.probeByConnectionId.keys()));
+      }
+    });
+    expect(controller.getSnapshot()).toMatchObject({ activeConnectionId: null, client: null });
+
+    const starting = controller.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.probeAttempts).toEqual([connectionA.id, connectionB.id]);
+    expect(harness.createdClients).toHaveLength(1);
+    const probeClientA = harness.createdClients[0]!.client;
+    expect(probeClientA.connect).toHaveBeenCalledOnce();
+    expect(probeClientA.close).not.toHaveBeenCalled();
+    expect(controller.getSnapshot()).toMatchObject({ activeConnectionId: null, client: null });
+    expect(controller.getSnapshot().probeByConnectionId.get(connectionA.id)?.status).toBe(
+      "pending",
+    );
+    expect(controller.getSnapshot().probeByConnectionId.get(connectionB.id)?.status).toBe(
+      "unavailable",
+    );
+
+    const removing = controller.updateHost(makeHost([connectionB]));
+    // Let removal reach its in-flight-cycle wait before A's connection resolves.
+    await vi.advanceTimersByTimeAsync(0);
+    resolveProbeA();
+    await Promise.all([starting, removing]);
+    removalResolved = true;
+    probeIdsAfterRemoval.push(Array.from(controller.getSnapshot().probeByConnectionId.keys()));
+
+    expect(controller.getSnapshot()).toMatchObject({ activeConnectionId: null, client: null });
+    expect(activeConnectionIds).not.toContain(connectionA.id);
+    expect(adoptedClients).not.toContain(probeClientA);
+    expect(probeClientA.close).toHaveBeenCalled();
+    expect(controller.getSnapshot().probeByConnectionId.has(connectionA.id)).toBe(false);
+
+    const attemptsAtRemoval = harness.probeAttempts.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    const laterAttempts = harness.probeAttempts.slice(attemptsAtRemoval);
+    expect(laterAttempts.length).toBeGreaterThan(0);
+    expect(laterAttempts.every((id) => id === connectionB.id)).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({ activeConnectionId: null, client: null });
+    expect(activeConnectionIds).not.toContain(connectionA.id);
+    expect(adoptedClients).not.toContain(probeClientA);
+    expect(probeIdsAfterRemoval.every((ids) => !ids.includes(connectionA.id))).toBe(true);
+    expect(harness.createdClients).toHaveLength(1);
+  });
 });
