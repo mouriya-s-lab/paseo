@@ -30,3 +30,21 @@ packages/app/src/utils/workspace-script-links.ts	trunk-patch	Managed proxy conne
 packages/app/src/utils/workspace-script-links.test.ts	fork-owned	Regression coverage for managed proxy workspace links
 packages/protocol/src/daemon-endpoints.test.ts	fork-owned	Regression coverage for validated proxy endpoint paths
 packages/app/src/stores/download-store.test.ts	fork-owned	Regression coverage for active connection download URL binding
+fork-features/upstream-sync/sync-merge.mjs	fork-owned	Upstream sync planner: keeps fork-deleted paths deleted, routes other conflicts and new upstream workflows to review
+fork-features/upstream-sync/sync-merge.test.mjs	fork-owned	Planner coverage against real git merges
+.github/workflows/sync-upstream.yml	fork-owned	Upstream sync PR automation driven by the sync planner
+.github/ci-paths.yml	fork-deleted	Upstream CI path filtering; the fork has no upstream CI
+.github/workflows/ci.yml	fork-deleted	Upstream CI on GitHub-hosted runners
+.github/workflows/nix.yml	fork-deleted	Nix build automation; the fork publishes Docker only
+.github/workflows/nix-update-hash.yml	fork-deleted	Nix hash automation; the fork publishes Docker only
+.github/workflows/release-notes-sync.yml	fork-deleted	Upstream release-note synchronization
+.github/workflows/deploy-relay.yml	fork-deleted	Relay deployment; the fork publishes Docker only
+.github/workflows/deploy-website.yml	fork-deleted	Website deployment; the fork publishes Docker only
+.github/workflows/desktop-release.yml	fork-deleted	Desktop release; the fork publishes Docker only
+.github/workflows/desktop-rollout.yml	fork-deleted	Desktop rollout; the fork publishes Docker only
+.github/workflows/android-apk-release.yml	fork-deleted	Android release; the fork publishes Docker only
+.github/workflows/deploy-app.yml	fork-deleted	EAS app deployment; the fork publishes Docker only
+packages/app/.eas/workflows/release-ios-beta.yml	fork-deleted	EAS iOS beta release; the fork publishes Docker only
+packages/app/.eas/workflows/release-mobile.yml	fork-deleted	EAS mobile release; the fork publishes Docker only
+packages/app/.eas/workflows/resubmit-ios-review.yml	fork-deleted	EAS iOS resubmission; the fork publishes Docker only
+scripts/ci-workflow.test.mjs	fork-deleted	Tests for the removed upstream CI workflow
