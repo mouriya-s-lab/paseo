@@ -59,7 +59,7 @@ export function readSelfHostedLocalDaemonOverride(input?: {
     input?.location ??
     (typeof window === "undefined"
       ? undefined
-      : { hash: window.location.hash, host: window.location.host });
+      : { hash: window.location.hash ?? "", host: window.location.host });
   const hashOverride = location?.hash.match(/[#&]tcp=([^&#]+:\d+)/u)?.[1];
   if (hashOverride) {
     return hashOverride;
@@ -116,6 +116,27 @@ export function selfHostedConnectionId(id: string): string {
 
 export function isSelfHostedConnectionId(id: string): boolean {
   return id.startsWith("selfhosted:");
+}
+
+/**
+ * Id of a stored directTcp connection, or null when the record is invalid: a `selfhosted:*`
+ * id must carry the matching `/daemons/<id>` basePath, and only managed connections may
+ * carry a basePath.
+ */
+export function storedDirectTcpConnectionId(input: {
+  id?: string;
+  basePath?: string;
+  endpoint: string;
+}): string | null {
+  const storedId = input.id?.trim() ?? "";
+  const managedMatch = storedId.match(SELF_HOSTED_CONNECTION_ID_PATTERN);
+  if (managedMatch) {
+    return input.basePath === `/daemons/${managedMatch[1]}` ? managedMatch[0] : null;
+  }
+  if (isSelfHostedConnectionId(storedId) || input.basePath !== undefined) {
+    return null;
+  }
+  return `direct:${input.endpoint}`;
 }
 
 export function buildSelfHostedConnection(input: {

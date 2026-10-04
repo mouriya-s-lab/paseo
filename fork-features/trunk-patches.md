@@ -7,20 +7,21 @@ patch and delete the entry.
 
 ## Self-hosted connections
 
-The canonical behavior comes from
-`/Users/mouriya/Ext/code/homelab-apps-investigate/stacks/paseo/app.patch` at
-`f5d9b093ff4e3f6c68e4df7140d809d50415f93b` (generated from Paseo
-`78b285059f6ebd0b257c98bd191df4626721270a`). The homelab deployment generator
-is not part of this repository; it remains owned by `homelab-apps`.
+The behavior lives in `packages/app/src/fork-features/self-hosted/`: `runtime.ts`
+(manifest, reconciliation, stored managed ids, endpoint overrides) and
+`bootstrap.ts` (manifest boot, retry loop, runtime connection projection). The
+reverse proxy that serves `/_paseo/hosts.json` and strips `/daemons/<id>` before
+forwarding to each daemon is owned by `mouriya-s-lab/homelab-apps`
+(`stacks/paseo/`), not by this repository.
 
-| File                                               | Symbol or surface                               | Why a trunk patch remains                                                                                                                                 |
-| -------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/app/src/runtime/host-runtime.ts`         | `HostRuntimeController`, `HostRuntimeStore`     | Host probing, bootstrap, and persistence have no registration or callback seam. The fork must wire the package-local self-hosted module into those paths. |
-| `packages/app/src/types/host-connection.ts`        | `HostConnection`, stored registry normalization | The connection union and storage parser have no extension seam. `basePath` must be an optional field so old direct TCP records remain valid.              |
-| `packages/app/src/stores/download-store.ts`        | `resolveDaemonDownloadTarget`                   | Downloads derive HTTP URLs directly and expose no transport strategy registry.                                                                            |
-| `packages/app/src/utils/test-daemon-connection.ts` | direct TCP branch of `buildClientConfig`        | Probe clients construct WebSocket URLs directly and expose no transport strategy registry.                                                                |
-| `packages/protocol/src/daemon-endpoints.ts`        | `buildDaemonWebSocketUrl`                       | The shared URL builder has no provider registration API; proxy paths must be validated at this boundary.                                                  |
-| `packages/protocol/src/host-connection-schema.ts`  | `DirectTcpHostConnectionSchema`                 | The shared schema has no extension API; `basePath` is optional to preserve protocol/storage compatibility.                                                |
+| File                                               | Symbol or surface                               | Why a trunk patch remains                                                                                                                                                                                                                                         |
+| -------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/app/src/runtime/host-runtime.ts`         | `HostRuntimeController`, `HostRuntimeStore`     | The controller has no connection-filter seam: its constructor and `updateHost` store `selfHostedRuntimeHost(host)`, and `forgetRemovedConnections` closes an active connection the manifest removed. `runBoot` hands self-hosted builds to `SelfHostedBootstrap`. |
+| `packages/app/src/types/host-connection.ts`        | `HostConnection`, stored registry normalization | The storage parser has no extension seam. The directTcp branch takes its id from `storedDirectTcpConnectionId` and keeps `basePath`, so old direct TCP records stay valid.                                                                                        |
+| `packages/app/src/stores/download-store.ts`        | `resolveDaemonDownloadTarget`                   | Downloads derive HTTP URLs directly and expose no transport strategy registry.                                                                                                                                                                                    |
+| `packages/app/src/utils/test-daemon-connection.ts` | direct TCP branch of `buildClientConfig`        | Probe clients construct WebSocket URLs directly and expose no transport strategy registry.                                                                                                                                                                        |
+| `packages/protocol/src/daemon-endpoints.ts`        | `buildDaemonWebSocketUrl`                       | The shared URL builder has no provider registration API; proxy paths must be validated at this boundary.                                                                                                                                                          |
+| `packages/protocol/src/host-connection-schema.ts`  | `DirectTcpHostConnectionSchema`                 | The shared schema has no extension API; `basePath` is optional to preserve protocol/storage compatibility.                                                                                                                                                        |
 
 ## Docker-only integration
 
@@ -32,9 +33,10 @@ is not part of this repository; it remains owned by `homelab-apps`.
 
 The old build-time crypto replacement is intentionally absent because upstream
 already fixed that recursion in `2fed0f09bb96d804285902702b192a7bf09be665`.
-The old `#tcp=` and `EXPO_PUBLIC_LOCAL_DAEMON=self-hosted` behavior is now
-implemented in `packages/app/src/fork-features/self-hosted/runtime.ts` and is
-wired through the host runtime patch.
+The old `#tcp=` and `EXPO_PUBLIC_LOCAL_DAEMON=self-hosted` behavior is
+implemented by `readSelfHostedLocalDaemonOverride` in `runtime.ts`; the host
+runtime's `readConfiguredLocalDaemonOverride` keeps its upstream call sites and
+only delegates to it.
 
 Verification for each rebase:
 
