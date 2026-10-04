@@ -1,0 +1,11 @@
+self-hosted-runner:
+  labels:
+    - self-hosted
+    - linux
+    - vctcn
+    - netbird
+    - x64
+
+config-variables: null
+
+paths:

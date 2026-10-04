@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useHosts } from "@/runtime/host-runtime";
+import { useHostRuntimeSnapshot, useHosts } from "@/runtime/host-runtime";
 import { useDownloadStore } from "@/stores/download-store";
 import { useFileExplorerActions } from "@/hooks/use-file-explorer-actions";
 
@@ -21,6 +21,7 @@ export function useFileDownload({
   workspaceRoot,
 }: UseFileDownloadParams): (input: { fileName: string; path: string }) => void {
   const daemons = useHosts();
+  const activeConnectionId = useHostRuntimeSnapshot(serverId)?.activeConnectionId ?? null;
   const daemonProfile = useMemo(
     () => daemons.find((daemon) => daemon.serverId === serverId),
     [daemons, serverId],
@@ -48,9 +49,17 @@ export function useFileDownload({
         fileName,
         path,
         daemonProfile,
+        activeConnectionId,
         requestFileDownloadToken: (targetPath) => requestFileDownloadToken(targetPath),
       });
     },
-    [daemonProfile, requestFileDownloadToken, serverId, startDownload, workspaceScopeId],
+    [
+      activeConnectionId,
+      daemonProfile,
+      requestFileDownloadToken,
+      serverId,
+      startDownload,
+      workspaceScopeId,
+    ],
   );
 }

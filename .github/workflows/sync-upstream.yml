@@ -1,0 +1,194 @@
+name: Sync upstream
+
+# Pulls new commits from upstream into this fork and lands them through PRs.
+# fork-features/upstream-sync/sync-merge.mjs plans each run:
+#
+#   - The longest prefix of upstream commits that merges into the fork's main
+#     without human judgment becomes a merge commit on `sync/merge`, opens a
+#     PR, waits for CI, and auto-merges when green. The planner keeps the
+#     fork-deleted rows of fork-features/ownership.tsv deleted when upstream
+#     edits them; that is the only conflict it resolves.
+#   - Whatever is left after the first commit that needs review (another
+#     conflict, or a new upstream workflow file) goes onto `sync/review`, opens
+#     a PR, and is LEFT OPEN for a human to resolve.
+#   - When the whole batch is auto-resolvable, there is just the one auto-merge
+#     PR and no review PR.
+#
+# Guarantees and the reasoning behind them:
+#   - At most ONE un-merged sync PR of each kind lives at a time. This is NOT
+#     enforced by counting — it relies on GitHub's server-side rule that a
+#     given (head, base) pair can have only one open PR. The fixed branch names
+#     `sync/merge` / `sync/review` are the real uniqueness key; a duplicate
+#     create request is treated as "already there".
+#   - Before doing anything, we bail out if ANY open PR carries the
+#     `upstream-sync` label. That covers both the review PR waiting on a human
+#     and an auto-merge PR that stayed open because its CI went red. We never
+#     force-push a sync branch while a human may be resolving conflicts on it.
+#   - The planner and its fork-deleted allowlist come from the fork's main,
+#     never from upstream, so upstream cannot authorize its own resolution.
+#   - `concurrency` stops a manual dispatch and the cron from racing.
+#   - The CI gate below must remain active: a sync PR is not auto-merged without
+#     its checks passing.
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: https://github.com/getpaseo/paseo.git
+  UPSTREAM_BRANCH: main
+  BASE_BRANCH: main
+  MERGE_BRANCH: sync/merge # clean prefix → auto-merge
+  REVIEW_BRANCH: sync/review # conflicting tail → human review
+  SYNC_LABEL: upstream-sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      # PAT, not GITHUB_TOKEN: (1) GITHUB_TOKEN cannot open PRs on a fork;
+      # (2) it lacks the workflow permission needed when an upstream change
+      # touches .github/workflows/*; (3) a PAT-opened PR triggers the fork's
+      # pull_request CI, which makes the gate below meaningful.
+      GH_TOKEN: ${{ secrets.SYNC_PAT }}
+      REPO: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_PAT }}
+
+      - name: Re-entrancy gate — skip if a sync PR is still open
+        id: gate
+        run: |
+          gh label create "$SYNC_LABEL" --repo "$REPO" --color ededed \
+            --description "Automated upstream-sync PR" >/dev/null 2>&1 || true
+          open=$(gh pr list --repo "$REPO" --label "$SYNC_LABEL" --state open \
+            --json number --jq 'length')
+          if [ "$open" -gt 0 ]; then
+            echo "An un-merged sync PR is still open — resolve it first. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch upstream + base
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          git remote add upstream "$UPSTREAM" 2>/dev/null || true
+          git fetch upstream "$UPSTREAM_BRANCH"
+          git fetch origin "$BASE_BRANCH"
+
+      - name: Sync
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+
+          # --- helpers ----------------------------------------------------
+          # All diagnostics go to stderr so the captured stdout of open_pr()
+          # is ONLY the PR number.
+          open_pr() {
+            local head="$1" base="$2" title="$3" body="$4" n
+            # Reuse an existing open PR for this (head, base) if present.
+            n=$(gh api "repos/$REPO/pulls?head=$OWNER:$head&base=$base&state=open" \
+                  --jq '.[0].number // empty')
+            if [ -z "$n" ]; then
+              # 422 fallback: a racing run may have just created it.
+              n=$(gh api "repos/$REPO/pulls" -X POST \
+                    -f title="$title" -f head="$head" -f base="$base" -f body="$body" \
+                    --jq '.number' 2>/dev/null) || \
+              n=$(gh api "repos/$REPO/pulls?head=$OWNER:$head&base=$base&state=open" \
+                    --jq '.[0].number // empty')
+            fi
+            if [ -n "$n" ]; then
+              gh pr edit "$n" --repo "$REPO" --add-label "$SYNC_LABEL" >/dev/null 2>&1 || true
+            fi
+            echo "$n"
+          }
+
+          # Wait for the PR's CI to finish, then merge if green. Returns 0 only
+          # when the merge succeeded; callers use `if !`/`||`, which disables
+          # errexit inside this function, so every failure returns explicitly.
+          gate_and_merge() {
+            local pr="$1"
+            echo "Waiting for CI on PR #$pr ..." >&2
+            sleep 20  # give the pull_request CI run time to register
+            if ! gh pr checks "$pr" --repo "$REPO" --watch --fail-fast; then
+              echo "CI not green on PR #$pr — leaving it open for review." >&2
+              return 1
+            fi
+            if ! gh pr merge "$pr" --repo "$REPO" --merge; then
+              echo "Merging PR #$pr failed — leaving it open for review." >&2
+              return 1
+            fi
+            echo "PR #$pr auto-merged." >&2
+            return 0
+          }
+
+          today=$(date +%F)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          plan=$(node fork-features/upstream-sync/sync-merge.mjs \
+            --base origin/"$BASE_BRANCH" --upstream upstream/"$UPSTREAM_BRANCH")
+          echo "Sync plan: $plan"
+          field() { PLAN="$plan" node -e 'const v = JSON.parse(process.env.PLAN)[process.argv[1]]; process.stdout.write(v == null ? "" : typeof v === "string" ? v : JSON.stringify(v));' "$1"; }
+          outcome=$(field outcome)
+          merge_commit=$(field mergeCommit)
+          deleted=$(field deletedPaths)
+
+          case "$outcome" in
+            up-to-date)
+              echo "No new upstream commits."
+              exit 0
+              ;;
+            full)
+              echo "Whole upstream batch is auto-resolvable (kept deleted: $deleted) — single auto-merge PR."
+              git push --force-with-lease origin "$merge_commit:refs/heads/$MERGE_BRANCH"
+              pr=$(open_pr "$MERGE_BRANCH" "$BASE_BRANCH" \
+                "Sync upstream (auto-merge) → $today" \
+                $'Automated sync of `upstream/main`. Fork-deleted paths stay deleted; nothing else needed review.\n\nAuto-merges once CI is green.')
+              gate_and_merge "$pr" || true
+              exit 0
+              ;;
+            prefix)
+              echo "Auto-resolvable prefix ends at $(field target) (kept deleted: $deleted); review needed from $(field blocked)."
+              git push --force-with-lease origin "$merge_commit:refs/heads/$MERGE_BRANCH"
+              prA=$(open_pr "$MERGE_BRANCH" "$BASE_BRANCH" \
+                "Sync upstream (auto-merge prefix) → $today" \
+                $'Automated sync — the prefix of upstream commits that merges into this fork without review. Fork-deleted paths stay deleted.\n\nAuto-merges once CI is green; the rest is in a separate review PR.')
+              if ! gate_and_merge "$prA"; then
+                echo "Prefix CI not green — NOT opening the review PR this round."
+                echo "Resolve PR #$prA first; the tail will follow next run."
+                exit 0
+              fi
+              # main advanced to the prefix; re-fetch so the review PR's diff
+              # is exactly the tail, not prefix+tail.
+              git fetch origin "$BASE_BRANCH"
+              ;;
+            none)
+              echo "The first upstream commit already needs review: $(field blocked)"
+              ;;
+            *)
+              echo "Unknown sync plan outcome: $outcome" >&2
+              exit 1
+              ;;
+          esac
+
+          # --- tail that needs review → review PR (left open) ------------
+          git push --force-with-lease origin \
+            "upstream/$UPSTREAM_BRANCH:refs/heads/$REVIEW_BRANCH"
+          prB=$(open_pr "$REVIEW_BRANCH" "$BASE_BRANCH" \
+            "Sync upstream — needs review → $today" \
+            $'Automated sync — these upstream commits need a human: a conflict outside the fork-deleted paths, or a new upstream workflow file.\n\nResolve them here, then merge. Upstream edits to `fork-deleted` paths in `fork-features/ownership.tsv` are resolved by keeping the path deleted. The next scheduled run is gated on this PR being closed/merged.')
+          echo "Opened review PR #$prB — left open for manual resolution."

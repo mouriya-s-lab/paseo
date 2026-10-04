@@ -86,6 +86,11 @@ import { projectIconCache } from "@/projects/icon-cache";
 import { nativePerformanceTrace } from "@/performance/native-trace";
 import { revokePushNotifications } from "@/push-notifications";
 import { createAppWebSocketFactory } from "./websocket-factory";
+import { SelfHostedBootstrap, selfHostedRuntimeHost } from "@/fork-features/self-hosted/bootstrap";
+import {
+  isSelfHostedBuildEnabled,
+  readSelfHostedLocalDaemonOverride,
+} from "@/fork-features/self-hosted/runtime";
 
 export type HostRuntimeConnectionStatus = "idle" | "connecting" | "online" | "offline" | "error";
 export type PairingNavigationTarget = "openProject" | "hostRoot" | "hostSettings";
@@ -113,7 +118,7 @@ export type ConnectionLinkImport =
   | { status: "cancelled" };
 
 export type ActiveConnection =
-  | { type: "directTcp"; endpoint: string; display: string }
+  | { type: "directTcp"; endpoint: string; display: string; basePath?: string; useTls?: boolean }
   | { type: "directSocket"; endpoint: string; display: "socket" }
   | { type: "directPipe"; endpoint: string; display: "pipe" }
   | { type: "remoteSsh"; endpoint: string; display: string }
@@ -260,6 +265,8 @@ function toActiveConnection(connection: HostConnection): ActiveConnection {
       type: "directTcp",
       endpoint: connection.endpoint,
       display: connection.endpoint,
+      ...(connection.basePath !== undefined ? { basePath: connection.basePath } : {}),
+      ...(connection.useTls !== undefined ? { useTls: connection.useTls } : {}),
     };
   }
   return {
@@ -580,6 +587,7 @@ function createDefaultDeps(): HostRuntimeControllerDeps {
           ...webSocketConfig,
           url: buildDaemonWebSocketUrl(connection.endpoint, {
             useTls: connection.useTls ?? false,
+            ...(connection.basePath !== undefined ? { basePath: connection.basePath } : {}),
           }),
         });
       }
@@ -656,7 +664,7 @@ export class HostRuntimeController {
     deps?: HostRuntimeControllerDeps;
     onReconcileServerId?: (oldId: string, newId: string) => void;
   }) {
-    this.host = input.host;
+    this.host = selfHostedRuntimeHost(input.host);
     this.deps = input.deps ?? createDefaultDeps();
     this.onReconcileServerId = input.onReconcileServerId ?? null;
     this.connectionMachineState = {
@@ -752,9 +760,11 @@ export class HostRuntimeController {
       this.updateSnapshot({ authFailureReason: null });
     }
     const activeConnectionId = this.snapshot.activeConnectionId;
+    const previousHost = this.host;
     const previousActiveConnection = findConnectionById(this.host, activeConnectionId);
-    this.host = host;
+    this.host = selfHostedRuntimeHost(host);
     this.trackConnectionFirstSeen();
+    await this.forgetRemovedConnections(previousHost);
     const nextActiveConnection = findConnectionById(this.host, activeConnectionId);
     if (
       activeConnectionId &&
@@ -1249,6 +1259,38 @@ export class HostRuntimeController {
     }
   }
 
+  // Fork: the self-hosted manifest can remove the active connection. Invalidate the in-flight
+  // probe cycle (its results may name removed connections), close a removed active client, and
+  // drop probe state for every removed connection so no later cycle selects them.
+  private async forgetRemovedConnections(previousHost: HostProfile): Promise<void> {
+    const currentIds = new Set(this.host.connections.map((connection) => connection.id));
+    const removedIds = previousHost.connections
+      .map((connection) => connection.id)
+      .filter((id) => !currentIds.has(id));
+    if (removedIds.length === 0) {
+      return;
+    }
+    this.probeRequestVersion += 1;
+    await this.probeCycleInFlight;
+    const probeByConnectionId = new Map(this.snapshot.probeByConnectionId);
+    for (const id of removedIds) {
+      probeByConnectionId.delete(id);
+      this.connectionLastProbedAt.delete(id);
+      this.authRejectedConnectionIds.delete(id);
+    }
+    this.updateSnapshot({ probeByConnectionId });
+    const activeConnectionId = this.snapshot.activeConnectionId;
+    if (activeConnectionId === null || !removedIds.includes(activeConnectionId)) {
+      return;
+    }
+    await this.disposePreviousActiveClient();
+    this.applyConnectionEvent({ type: "no_connections" });
+    this.updateSnapshot({
+      ...toSnapshotConnectionPatch(this.connectionMachineState, this.connectionEpoch),
+      client: null,
+    });
+  }
+
   private buildAgentDirectoryStatusPatch(): Partial<HostRuntimeSnapshotPatch> {
     if (this.snapshot.hasEverLoadedAgentDirectory) return {};
     const tag = this.connectionMachineState.tag;
@@ -1434,8 +1476,7 @@ export function readInitialDaemonConnectionHint(input?: {
 }
 
 function readConfiguredLocalDaemonOverride(): string | null {
-  const value = process.env.EXPO_PUBLIC_LOCAL_DAEMON?.trim();
-  return value && value.length > 0 ? value : null;
+  return readSelfHostedLocalDaemonOverride();
 }
 
 function isSameLinkedConnection(left: ConnectionOffer, right: ConnectionOffer): boolean {
@@ -1505,6 +1546,13 @@ export class HostRuntimeStore {
   private nextCancellationRequestId = 0;
   private timelineReplicaByServer = new Map<string, TimelineReplica>();
   private configuredOverrideBootstrapInFlight: Promise<void> | null = null;
+  private readonly selfHostedBootstrap = new SelfHostedBootstrap({
+    currentHosts: () => this.hosts,
+    replaceHosts: (hosts) => this.setHostsAndSync(hosts),
+    persistHosts: () => this.persistHosts(),
+    probeAndUpsertConnection: (input) => this.probeAndUpsertConnection(input),
+    runProbeCycleNow: () => this.runProbeCycleNow(),
+  });
   private bootPromise: Promise<void> | null = null;
   private registryLoad: Promise<void> | null = null;
   private readonly hostConfirmations = new HostConfirmations();
@@ -1571,6 +1619,10 @@ export class HostRuntimeStore {
     }
 
     if (shouldUseDesktopDaemon()) {
+      return;
+    }
+    if (isSelfHostedBuildEnabled()) {
+      await this.selfHostedBootstrap.run();
       return;
     }
 

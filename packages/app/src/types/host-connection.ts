@@ -6,6 +6,7 @@ import {
 } from "@getpaseo/protocol/daemon-endpoints";
 import {
   DirectTcpHostConnectionSchema,
+  ProxyBasePathSchema,
   type DirectTcpHostConnection as WireDirectTcpHostConnection,
 } from "@getpaseo/protocol/host-connection-schema";
 import {
@@ -18,6 +19,7 @@ import {
   defaultHostAppearance,
   HostAppearanceSchema,
 } from "@/hosts/appearance";
+import { storedDirectTcpConnectionId } from "@/fork-features/self-hosted/runtime";
 import { z } from "zod";
 
 export { DirectTcpHostConnectionSchema };
@@ -129,7 +131,11 @@ function hostConnectionEquals(left: HostConnection, right: HostConnection): bool
   }
 
   if (left.type === "directTcp" && right.type === "directTcp") {
-    return left.endpoint === right.endpoint && (left.useTls ?? false) === (right.useTls ?? false);
+    return (
+      left.endpoint === right.endpoint &&
+      (left.useTls ?? false) === (right.useTls ?? false) &&
+      left.basePath === right.basePath
+    );
   }
   if (left.type === "directSocket" && right.type === "directSocket") {
     return left.path === right.path;
@@ -404,6 +410,7 @@ const StoredHostConnectionSchema = z.discriminatedUnion("type", [
     type: z.literal("directTcp"),
     endpoint: z.string(),
     useTls: z.boolean().optional(),
+    basePath: ProxyBasePathSchema.optional(),
     password: z.string().optional(),
   }),
   z.strictObject({
@@ -449,13 +456,24 @@ function normalizeStoredConnection(connection: StoredHostConnection): HostConnec
   if (connection.type === "directTcp") {
     try {
       const endpoint = normalizeLoopbackToLocalhost(normalizeHostPort(connection.endpoint));
+      const id = storedDirectTcpConnectionId({ ...connection, endpoint });
+      if (id === null) {
+        return null;
+      }
       const parsed = DirectTcpHostConnectionSchema.parse({
-        id: `direct:${endpoint}`,
+        id,
         type: "directTcp",
         endpoint,
         useTls: connection.useTls,
+        ...(connection.basePath !== undefined ? { basePath: connection.basePath } : {}),
       });
-      return { id: parsed.id, type: parsed.type, endpoint: parsed.endpoint, useTls: parsed.useTls };
+      return {
+        id: parsed.id,
+        type: parsed.type,
+        endpoint: parsed.endpoint,
+        useTls: parsed.useTls,
+        ...(parsed.basePath !== undefined ? { basePath: parsed.basePath } : {}),
+      };
     } catch {
       return null;
     }
