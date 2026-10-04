@@ -5,6 +5,7 @@ import {
   parseSelfHostedManifest,
   readSelfHostedLocalDaemonOverride,
   reconcileSelfHostedHostProfiles,
+  storedDirectTcpConnectionId,
 } from "./runtime";
 
 function makeProfile(): HostProfile {
@@ -108,5 +109,23 @@ describe("self-hosted runtime fork", () => {
         useTls: false,
       },
     ]);
+  });
+
+  it("accepts stored managed ids only with their own basePath", () => {
+    const endpoint = "proxy.example:443";
+    expect(
+      storedDirectTcpConnectionId({ id: "selfhosted:alpha", basePath: "/daemons/alpha", endpoint }),
+    ).toBe("selfhosted:alpha");
+    expect(storedDirectTcpConnectionId({ id: "anything", endpoint })).toBe(
+      "direct:proxy.example:443",
+    );
+    expect(
+      storedDirectTcpConnectionId({ id: "selfhosted:alpha", basePath: "/daemons/beta", endpoint }),
+    ).toBeNull();
+    expect(storedDirectTcpConnectionId({ id: "selfhosted:alpha", endpoint })).toBeNull();
+    expect(
+      storedDirectTcpConnectionId({ id: "selfhosted:Bad_Id", basePath: "/daemons/x", endpoint }),
+    ).toBeNull();
+    expect(storedDirectTcpConnectionId({ basePath: "/daemons/alpha", endpoint })).toBeNull();
   });
 });

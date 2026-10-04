@@ -14,7 +14,6 @@ import {
   upsertHostConnectionInProfiles,
   registryHasConnection,
   StoredHostRegistrySchema,
-  type DirectTcpHostConnection,
   type HostConnection,
   type HostProfile,
 } from "@/types/host-connection";
@@ -81,28 +80,17 @@ import { projectIconCache } from "@/projects/icon-cache";
 import { nativePerformanceTrace } from "@/performance/native-trace";
 import { revokePushNotifications } from "@/push-notifications";
 import { createAppWebSocketFactory } from "./websocket-factory";
+import { SelfHostedBootstrap, selfHostedRuntimeHost } from "@/fork-features/self-hosted/bootstrap";
 import {
-  buildSelfHostedConnection,
-  fetchSelfHostedManifest,
   isSelfHostedBuildEnabled,
-  isSelfHostedConnectionId,
-  readSelfHostedBrowserTarget,
   readSelfHostedLocalDaemonOverride,
-  reconcileSelfHostedHostProfiles,
-  type SelfHostedManifestEntry,
 } from "@/fork-features/self-hosted/runtime";
 
 export type HostRuntimeConnectionStatus = "idle" | "connecting" | "online" | "offline" | "error";
 export type HostRegistryStatus = "loading" | "ready";
 
 export type ActiveConnection =
-  | {
-      type: "directTcp";
-      endpoint: string;
-      display: string;
-      basePath?: string;
-      useTls?: boolean;
-    }
+  | { type: "directTcp"; endpoint: string; display: string; basePath?: string; useTls?: boolean }
   | { type: "directSocket"; endpoint: string; display: "socket" }
   | { type: "directPipe"; endpoint: string; display: "pipe" }
   | { type: "remoteSsh"; endpoint: string; display: string }
@@ -220,7 +208,6 @@ const PROBE_INACTIVE_WHILE_ONLINE_MS = 120_000;
 const ADAPTIVE_SWITCH_THRESHOLD_MS = 40;
 const ADAPTIVE_SWITCH_CONSECUTIVE_PROBES = 3;
 const CONFIGURED_OVERRIDE_BOOTSTRAP_RETRY_MS = 1_000;
-const SELF_HOSTED_DISCOVERY_RETRY_MS = 10_000;
 
 function toActiveConnection(connection: HostConnection): ActiveConnection {
   if (connection.type === "directSocket") {
@@ -476,48 +463,11 @@ function toSnapshotConnectionPatch(
   };
 }
 
-function connectionsForRuntime(host: HostProfile): HostConnection[] {
-  if (!isSelfHostedBuildEnabled()) {
-    return host.connections;
-  }
-  const managedConnections = host.connections.filter(
-    (connection) => connection.type === "directTcp" && isSelfHostedConnectionId(connection.id),
-  );
-  return managedConnections;
-}
-
 function buildConnectionCandidates(host: HostProfile): ConnectionCandidate[] {
-  return connectionsForRuntime(host).map((connection) => ({
+  return host.connections.map((connection) => ({
     connectionId: connection.id,
     connection,
   }));
-}
-
-interface ProbeCycleSelection {
-  candidates: ConnectionCandidate[];
-  candidateIds: Set<string>;
-  currentActiveCandidate: ConnectionCandidate | null;
-  activeProbe: ConnectionProbeState | null;
-}
-
-function buildProbeCycleSelection(input: {
-  host: HostProfile;
-  activeConnectionId: string | null;
-  probeByConnectionId: ReadonlyMap<string, ConnectionProbeState>;
-}): ProbeCycleSelection {
-  const candidates = buildConnectionCandidates(input.host);
-  const currentActiveCandidate =
-    candidates.find((candidate) => candidate.connectionId === input.activeConnectionId) ?? null;
-  const activeProbe =
-    input.activeConnectionId === null
-      ? null
-      : (input.probeByConnectionId.get(input.activeConnectionId) ?? null);
-  return {
-    candidates,
-    candidateIds: new Set(candidates.map((candidate) => candidate.connectionId)),
-    currentActiveCandidate,
-    activeProbe,
-  };
 }
 
 function findConnectionById(host: HostProfile, connectionId: string | null): HostConnection | null {
@@ -681,7 +631,7 @@ export class HostRuntimeController {
     deps?: HostRuntimeControllerDeps;
     onReconcileServerId?: (oldId: string, newId: string) => void;
   }) {
-    this.host = input.host;
+    this.host = selfHostedRuntimeHost(input.host);
     this.deps = input.deps ?? createDefaultDeps();
     this.onReconcileServerId = input.onReconcileServerId ?? null;
     this.connectionMachineState = {
@@ -764,9 +714,11 @@ export class HostRuntimeController {
 
   async updateHost(host: HostProfile): Promise<void> {
     const activeConnectionId = this.snapshot.activeConnectionId;
+    const previousHost = this.host;
     const previousActiveConnection = findConnectionById(this.host, activeConnectionId);
-    this.host = host;
+    this.host = selfHostedRuntimeHost(host);
     this.trackConnectionFirstSeen();
+    await this.forgetRemovedConnections(previousHost);
     const nextActiveConnection = findConnectionById(this.host, activeConnectionId);
     if (
       activeConnectionId &&
@@ -848,8 +800,7 @@ export class HostRuntimeController {
 
   private async runProbeCycle(): Promise<void> {
     const requestVersion = ++this.probeRequestVersion;
-    const runtimeConnections = connectionsForRuntime(this.host);
-    if (runtimeConnections.length === 0) {
+    if (this.host.connections.length === 0) {
       if (!this.isCurrentProbeRequest(requestVersion)) {
         return;
       }
@@ -865,14 +816,8 @@ export class HostRuntimeController {
     const isOnline = this.snapshot.connectionStatus === "online";
     const activeConnectionId = this.snapshot.activeConnectionId;
     const hasActiveOnlineConnection = isOnline && activeConnectionId !== null;
-    const activeConnectionIsDisallowed =
-      activeConnectionId !== null &&
-      !runtimeConnections.some((connection) => connection.id === activeConnectionId);
 
-    const connectionsToProbe = runtimeConnections.filter((connection) => {
-      if (activeConnectionIsDisallowed) {
-        return true;
-      }
+    const connectionsToProbe = this.host.connections.filter((connection) => {
       const lastProbed = this.connectionLastProbedAt.get(connection.id);
       if (lastProbed == null) {
         return true;
@@ -944,16 +889,13 @@ export class HostRuntimeController {
       }
 
       const currentActiveConnectionId = this.snapshot.activeConnectionId;
-      const { activeProbe, candidates, candidateIds, currentActiveCandidate } =
-        buildProbeCycleSelection({
-          host: this.host,
-          activeConnectionId: currentActiveConnectionId,
-          probeByConnectionId,
-        });
+      const activeProbe = currentActiveConnectionId
+        ? probeByConnectionId.get(currentActiveConnectionId)
+        : null;
 
-      if (!currentActiveConnectionId || !currentActiveCandidate) {
+      if (!currentActiveConnectionId || !findConnectionById(this.host, currentActiveConnectionId)) {
         const nextConnectionId = selectBestConnection({
-          candidates,
+          candidates: buildConnectionCandidates(this.host),
           probeByConnectionId,
         });
         if (nextConnectionId) {
@@ -961,15 +903,13 @@ export class HostRuntimeController {
             connectionId: nextConnectionId,
             expectedProbeVersion: requestVersion,
           });
-        } else if (currentActiveConnectionId) {
-          await this.clearActiveConnection();
         }
         return;
       }
 
       if (activeProbe?.status === "unavailable") {
         const nextConnectionId = selectBestConnection({
-          candidates,
+          candidates: buildConnectionCandidates(this.host),
           probeByConnectionId,
         });
         if (nextConnectionId && nextConnectionId !== currentActiveConnectionId) {
@@ -990,7 +930,7 @@ export class HostRuntimeController {
       const available = Array.from(probeByConnectionId.entries())
         .filter(
           (entry): entry is [string, Extract<ConnectionProbeState, { status: "available" }>] =>
-            candidateIds.has(entry[0]) && entry[1].status === "available",
+            entry[1].status === "available",
         )
         .map(([connectionId, probe]) => ({
           connectionId,
@@ -1250,7 +1190,29 @@ export class HostRuntimeController {
     }
   }
 
-  private async clearActiveConnection(): Promise<void> {
+  // Fork: the self-hosted manifest can remove the active connection. Invalidate the in-flight
+  // probe cycle (its results may name removed connections), close a removed active client, and
+  // drop probe state for every removed connection so no later cycle selects them.
+  private async forgetRemovedConnections(previousHost: HostProfile): Promise<void> {
+    const currentIds = new Set(this.host.connections.map((connection) => connection.id));
+    const removedIds = previousHost.connections
+      .map((connection) => connection.id)
+      .filter((id) => !currentIds.has(id));
+    if (removedIds.length === 0) {
+      return;
+    }
+    this.probeRequestVersion += 1;
+    await this.probeCycleInFlight;
+    const probeByConnectionId = new Map(this.snapshot.probeByConnectionId);
+    for (const id of removedIds) {
+      probeByConnectionId.delete(id);
+      this.connectionLastProbedAt.delete(id);
+    }
+    this.updateSnapshot({ probeByConnectionId });
+    const activeConnectionId = this.snapshot.activeConnectionId;
+    if (activeConnectionId === null || !removedIds.includes(activeConnectionId)) {
+      return;
+    }
     await this.disposePreviousActiveClient();
     this.applyConnectionEvent({ type: "no_connections" });
     this.updateSnapshot({
@@ -1419,8 +1381,12 @@ export function readInitialDaemonConnectionHint(input?: {
   return result.success ? result.data : null;
 }
 
+function readConfiguredLocalDaemonOverride(): string | null {
+  return readSelfHostedLocalDaemonOverride();
+}
+
 export function hasConfiguredLocalDaemonOverride(): boolean {
-  return readSelfHostedLocalDaemonOverride() !== null;
+  return readConfiguredLocalDaemonOverride() !== null;
 }
 
 function isPlaceholderServerId(serverId: string): boolean {
@@ -1447,11 +1413,6 @@ interface AgentDirectoryRefreshInput {
   page?: FetchAgentsOptions["page"];
 }
 
-interface SelfHostedPendingConnection {
-  entry: SelfHostedManifestEntry;
-  connection: DirectTcpHostConnection;
-}
-
 export class HostRuntimeStore {
   private controllers = new Map<string, HostRuntimeController>();
   private serverListeners = new Map<string, Set<() => void>>();
@@ -1471,9 +1432,13 @@ export class HostRuntimeStore {
   private nextCancellationRequestId = 0;
   private timelineReplicaByServer = new Map<string, TimelineReplica>();
   private configuredOverrideBootstrapInFlight: Promise<void> | null = null;
-  private selfHostedPendingConnections = new Map<string, SelfHostedPendingConnection>();
-  private selfHostedRetryIntervalHandle: ReturnType<typeof setInterval> | null = null;
-  private selfHostedRetryInFlight: Promise<void> | null = null;
+  private readonly selfHostedBootstrap = new SelfHostedBootstrap({
+    currentHosts: () => this.hosts,
+    replaceHosts: (hosts) => this.setHostsAndSync(hosts),
+    persistHosts: () => this.persistHosts(),
+    probeAndUpsertConnection: (input) => this.probeAndUpsertConnection(input),
+    runProbeCycleNow: () => this.runProbeCycleNow(),
+  });
   private bootPromise: Promise<void> | null = null;
   private storage: HostRuntimeStorage;
   private replicaCache: ReplicaCache;
@@ -1524,7 +1489,7 @@ export class HostRuntimeStore {
   }
 
   private async runBoot(): Promise<void> {
-    const override = readSelfHostedLocalDaemonOverride();
+    const override = readConfiguredLocalDaemonOverride();
     await this.loadFromStorage();
     this.markHostRegistryLoaded();
 
@@ -1542,7 +1507,7 @@ export class HostRuntimeStore {
       return;
     }
     if (isSelfHostedBuildEnabled()) {
-      await this.bootstrapSelfHostedManifest();
+      await this.selfHostedBootstrap.run();
       return;
     }
 
@@ -1636,126 +1601,6 @@ export class HostRuntimeStore {
         endpoint: LOCALHOST_FALLBACK_ENDPOINT,
         error,
       });
-    }
-  }
-
-  private async bootstrapSelfHostedManifest(): Promise<void> {
-    const target = readSelfHostedBrowserTarget();
-    if (!target) {
-      console.warn("[HostRuntime] self-hosted build requires an HTTP browser origin");
-      return;
-    }
-    let manifest: SelfHostedManifestEntry[];
-    try {
-      manifest = await fetchSelfHostedManifest();
-    } catch (error) {
-      console.warn("[HostRuntime] self-hosted manifest fetch failed", { error });
-      return;
-    }
-
-    let reconciled: HostProfile[];
-    try {
-      reconciled = reconcileSelfHostedHostProfiles({
-        profiles: this.hosts,
-        manifest,
-        endpoint: target.endpoint,
-        useTls: target.useTls,
-      });
-    } catch (error) {
-      console.warn("[HostRuntime] self-hosted manifest was rejected", { error });
-      return;
-    }
-
-    if (!equal(reconciled, this.hosts)) {
-      this.setHostsAndSync(reconciled);
-      try {
-        await this.persistHosts();
-      } catch (error) {
-        console.error("[HostRuntime] Failed to persist self-hosted host registry", error);
-      }
-    }
-
-    const pending = manifest.map((entry) => ({
-      entry,
-      connection: buildSelfHostedConnection({
-        entry,
-        endpoint: target.endpoint,
-        useTls: target.useTls,
-      }),
-    }));
-    const pendingById = new Map<string, SelfHostedPendingConnection>();
-    for (const candidate of pending) {
-      pendingById.set(candidate.entry.id, candidate);
-    }
-    this.selfHostedPendingConnections = pendingById;
-    await this.retrySelfHostedPendingConnections();
-
-    try {
-      await this.runProbeCycleNow();
-    } catch (error) {
-      console.error("[HostRuntime] self-hosted probe cycle failed", { error });
-    }
-    try {
-      await this.persistHosts();
-    } catch (error) {
-      console.error("[HostRuntime] Failed to persist self-hosted host registry", { error });
-    }
-  }
-
-  private async retrySelfHostedPendingConnections(): Promise<void> {
-    const inFlight = this.selfHostedRetryInFlight;
-    if (inFlight) {
-      await inFlight;
-      return;
-    }
-
-    const retry = this.runSelfHostedPendingConnections();
-    this.selfHostedRetryInFlight = retry;
-    try {
-      await retry;
-    } catch (error) {
-      console.error("[HostRuntime] self-hosted daemon retry failed", { error });
-    } finally {
-      if (this.selfHostedRetryInFlight === retry) {
-        this.selfHostedRetryInFlight = null;
-      }
-      this.ensureSelfHostedRetryInterval();
-    }
-  }
-
-  private async runSelfHostedPendingConnections(): Promise<void> {
-    const pending = Array.from(this.selfHostedPendingConnections.values());
-    const results = await Promise.allSettled(
-      pending.map(async ({ entry, connection }) => {
-        await this.probeAndUpsertConnection({
-          connection,
-          label: entry.label,
-        });
-        this.selfHostedPendingConnections.delete(entry.id);
-      }),
-    );
-    for (const [index, result] of results.entries()) {
-      if (result.status === "rejected") {
-        console.warn("[HostRuntime] self-hosted daemon probe failed", {
-          id: pending[index]?.entry.id,
-          error: result.reason,
-        });
-      }
-    }
-  }
-
-  private ensureSelfHostedRetryInterval(): void {
-    if (this.selfHostedPendingConnections.size === 0) {
-      if (this.selfHostedRetryIntervalHandle) {
-        clearInterval(this.selfHostedRetryIntervalHandle);
-        this.selfHostedRetryIntervalHandle = null;
-      }
-      return;
-    }
-    if (!this.selfHostedRetryIntervalHandle) {
-      this.selfHostedRetryIntervalHandle = setInterval(() => {
-        void this.retrySelfHostedPendingConnections();
-      }, SELF_HOSTED_DISCOVERY_RETRY_MS);
     }
   }
 

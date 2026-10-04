@@ -17,6 +17,7 @@ import {
   defaultHostAppearance,
   HostAppearanceSchema,
 } from "@/hosts/appearance";
+import { storedDirectTcpConnectionId } from "@/fork-features/self-hosted/runtime";
 import { z } from "zod";
 
 export { DirectTcpHostConnectionSchema, type DirectTcpHostConnection };
@@ -353,8 +354,6 @@ export function createRemoteSshHostConnection(input: {
   };
 }
 
-const SELF_HOSTED_CONNECTION_ID_PATTERN = /^selfhosted:([a-z0-9]+(?:-[a-z0-9]+)*)$/u;
-
 const StoredHostConnectionSchema = z.discriminatedUnion("type", [
   z.strictObject({
     id: z.string().optional(),
@@ -402,39 +401,25 @@ const StoredHostProfileSchema = z.strictObject({
 export const StoredHostRegistrySchema = z.array(StoredHostProfileSchema);
 type StoredHostConnection = z.infer<typeof StoredHostConnectionSchema>;
 
-type StoredDirectTcpConnection = Extract<StoredHostConnection, { type: "directTcp" }>;
-
-function normalizeStoredDirectTcpConnection(
-  connection: StoredDirectTcpConnection,
-): HostConnection | null {
-  try {
-    const endpoint = normalizeLoopbackToLocalhost(normalizeHostPort(connection.endpoint));
-    const storedId = connection.id?.trim() ?? "";
-    const managedMatch = storedId.match(SELF_HOSTED_CONNECTION_ID_PATTERN);
-    if (
-      (storedId.startsWith("selfhosted:") && !managedMatch) ||
-      (connection.basePath !== undefined && !managedMatch) ||
-      (managedMatch && connection.basePath !== `/daemons/${managedMatch[1]}`)
-    ) {
-      return null;
-    }
-    const id = managedMatch?.[0] ?? `direct:${endpoint}`;
-    return DirectTcpHostConnectionSchema.parse({
-      id,
-      type: "directTcp",
-      endpoint,
-      useTls: connection.useTls,
-      ...(connection.basePath !== undefined ? { basePath: connection.basePath } : {}),
-      ...(connection.password !== undefined ? { password: connection.password } : {}),
-    });
-  } catch {
-    return null;
-  }
-}
-
 function normalizeStoredConnection(connection: StoredHostConnection): HostConnection | null {
   if (connection.type === "directTcp") {
-    return normalizeStoredDirectTcpConnection(connection);
+    try {
+      const endpoint = normalizeLoopbackToLocalhost(normalizeHostPort(connection.endpoint));
+      const id = storedDirectTcpConnectionId({ ...connection, endpoint });
+      if (id === null) {
+        return null;
+      }
+      return DirectTcpHostConnectionSchema.parse({
+        id,
+        type: "directTcp",
+        endpoint,
+        useTls: connection.useTls,
+        ...(connection.basePath !== undefined ? { basePath: connection.basePath } : {}),
+        ...(connection.password !== undefined ? { password: connection.password } : {}),
+      });
+    } catch {
+      return null;
+    }
   }
   if (connection.type === "directSocket") {
     const path = connection.path.trim();

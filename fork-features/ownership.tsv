@@ -1,5 +1,9 @@
 packages/app/src/fork-features/self-hosted/runtime.ts	fork-owned	Same-origin manifest, managed connections, and legacy self-hosted endpoint resolution
 packages/app/src/fork-features/self-hosted/runtime.test.ts	fork-owned	Focused manifest, reconciliation, and endpoint override behavior
+packages/app/src/fork-features/self-hosted/bootstrap.ts	fork-owned	Self-hosted manifest boot, retry loop, and runtime connection projection
+packages/app/src/fork-features/self-hosted/bootstrap.test.ts	fork-owned	Manifest boot retry and reconciliation behavior
+packages/app/src/fork-features/self-hosted/host-runtime-projection.test.ts	fork-owned	Controller only uses managed connections in self-hosted builds
+packages/app/src/fork-features/self-hosted/host-runtime-removal.test.ts	fork-owned	Removed active connections are closed and never replaced by manual ones
 packages/app/src/runtime/host-runtime.ts	trunk-patch	No registration seam for host runtime probing/bootstrap; minimal fork wiring for self-hosted connections
 packages/app/src/types/host-connection.ts	trunk-patch	No connection-type extension seam; optional proxy basePath must persist through the host registry
 packages/app/src/stores/download-store.ts	trunk-patch	Download URL derivation has no strategy registration seam; preserve proxy basePath
