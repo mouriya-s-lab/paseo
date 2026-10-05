@@ -36,7 +36,9 @@ if [[ ! -f "$release/packages/server/dist/scripts/supervisor-entrypoint.js" ]]; 
   git -C "$root/repo" worktree add --quiet --detach "$release" "$sha"
   # mise refuses an untrusted checkout config, which would leave node unresolved.
   if command -v mise >/dev/null 2>&1; then mise trust --quiet "$release"; fi
-  /bin/zsh -i -l -c 'cd "$1" && npm ci --no-audit --no-fund && npm run build:server' _ "$release"
+  # CI=true: lefthook's npm postinstall would otherwise run `lefthook install -f` and
+  # rewrite the operator's global git hooks (core.hooksPath) to point into this release.
+  /bin/zsh -i -l -c 'cd "$1" && CI=true npm ci --no-audit --no-fund && npm run build:server' _ "$release"
 fi
 resolved_node=$(/bin/zsh -i -l -c 'cd "$1" && node -p process.execPath' _ "$release" | tail -n 1)
 [[ -x "$resolved_node" ]] || { echo "node not resolved for $release" >&2; exit 1; }

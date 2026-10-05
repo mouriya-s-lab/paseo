@@ -7,13 +7,16 @@ import type { GateVerdict, workspaceGateRpc } from "../shared/gate";
 // The plugin RPC itself times out after 30 s; fetch gets most of that budget.
 const GIT_TIMEOUT_MS = 8_000;
 const FETCH_TIMEOUT_MS = 18_000;
+// The system git, as the former SSH gate resolved it. The daemon's login-shell PATH
+// puts Homebrew first, and Homebrew binaries hang on the operator's Mac.
+const GIT = "/Library/Developer/CommandLineTools/usr/bin/git";
 
 type Git = { ok: true; out: string } | { ok: false; error: string };
 
 function git(cwd: string, args: readonly string[], timeout = GIT_TIMEOUT_MS): Promise<Git> {
   const { promise, resolve } = Promise.withResolvers<Git>();
   execFile(
-    "git",
+    GIT,
     ["-C", cwd, ...args],
     { timeout, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } },
     (error, stdout, stderr) => {
