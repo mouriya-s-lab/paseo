@@ -38,8 +38,16 @@ if [[ ! -f "$release/packages/server/dist/scripts/supervisor-entrypoint.js" ]]; 
   if command -v mise >/dev/null 2>&1; then mise trust --quiet "$release"; fi
   /bin/zsh -i -l -c 'cd "$1" && npm ci --no-audit --no-fund && npm run build:server' _ "$release"
 fi
-node_bin=$(/bin/zsh -i -l -c 'cd "$1" && node -p process.execPath' _ "$release" | tail -n 1)
-[[ -x "$node_bin" ]] || { echo "node not resolved for $release" >&2; exit 1; }
+resolved_node=$(/bin/zsh -i -l -c 'cd "$1" && node -p process.execPath' _ "$release" | tail -n 1)
+[[ -x "$resolved_node" ]] || { echo "node not resolved for $release" >&2; exit 1; }
+# Copy the interpreter off ~/Ext: macOS denies sshd sessions file access to that volume,
+# and the router's SSH gate runs this wrapper (mouriya-s-lab/paseo#40).
+node_bin="$root/node/$("$resolved_node" -v)/node"
+if [[ ! -x "$node_bin" ]]; then
+  mkdir -p "${node_bin:h}"
+  cp -p "$resolved_node" "$node_bin.next"
+  mv -f "$node_bin.next" "$node_bin"
+fi
 
 # The wrapper is what agents (PASEO_CLI) and the router's SSH gate call; a non-login SSH
 # shell has no node on PATH, so it pins the absolute interpreter.
@@ -99,4 +107,15 @@ else
     /bin/zsh -i -l -c '"$1" daemon stop --home "$2" >/dev/null 2>&1 || true; "$1" daemon start --home "$2" --json' \
     _ "$root/bin/paseo" "$paseo_home"
 fi
+
+# The router's gate (`paseo iac-gate`) runs its checks in this plugin, inside the daemon,
+# which can read the checkouts (mouriya-s-lab/paseo#40). Re-point it at this release.
+plugin="$release/fork-features/iac-workspace-gate/plugin"
+installed=false
+for _ in {1..30}; do
+  "$root/bin/paseo" plugin remove iac-workspace-gate >/dev/null 2>&1 || true
+  if "$root/bin/paseo" plugin install "$plugin" --json >/dev/null 2>&1; then installed=true; break; fi
+  sleep 2
+done
+[[ "$installed" == true ]] || { echo "iac-workspace-gate plugin install failed" >&2; exit 1; }
 echo "mode=$mode release=$sha node=$node_bin plist=$plist"
