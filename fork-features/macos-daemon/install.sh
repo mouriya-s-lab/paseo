@@ -1,9 +1,18 @@
 #!/bin/zsh
-# Build a pinned fork commit and run it as the operator's Mac daemon under launchd.
-# Usage: fork-features/macos-daemon/install.sh <git-ref>
+# Build a pinned fork commit and run it as the operator's Mac daemon.
+# Usage: fork-features/macos-daemon/install.sh [--session] <git-ref>
+#
+# Default: run under a launchd LaunchAgent. The checkouts the agents work in live on the
+# separate ~/Ext APFS volume, and macOS privacy (TCC) denies launchd-started processes
+# file access there until the operator allows the pinned node binary once (System Settings >
+# Privacy & Security). Until then the job starts but cannot read the volume.
+# --session: skip launchd and restart the daemon detached from the calling terminal, which
+# inherits that terminal's file access. It does not survive a logout or reboot.
 set -euo pipefail
 
-ref=${1:?usage: install.sh <git-ref>}
+mode=launchd
+if [[ "${1:-}" == "--session" ]]; then mode=session; shift; fi
+ref=${1:?usage: install.sh [--session] <git-ref>}
 root="$HOME/.local/share/paseo-fork-daemon"
 label="sh.paseo.fork-daemon"
 plist="$HOME/Library/LaunchAgents/$label.plist"
@@ -81,5 +90,13 @@ if launchctl print "$domain/$label" >/dev/null 2>&1; then
   # bootout returns before the job is fully removed; bootstrap fails while it lingers.
   for _ in {1..30}; do launchctl print "$domain/$label" >/dev/null 2>&1 || break; sleep 1; done
 fi
-launchctl bootstrap "$domain" "$plist"
-echo "release=$sha node=$node_bin plist=$plist"
+if [[ "$mode" == launchd ]]; then
+  launchctl bootstrap "$domain" "$plist"
+else
+  # A clean login environment, as launchd would give, rather than the caller's shell state.
+  env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL=/bin/zsh TERM=xterm-256color \
+    PASEO_NODE_ENV=production PASEO_CLI="$root/bin/paseo" \
+    /bin/zsh -i -l -c '"$1" daemon stop --home "$2" >/dev/null 2>&1 || true; "$1" daemon start --home "$2" --json' \
+    _ "$root/bin/paseo" "$paseo_home"
+fi
+echo "mode=$mode release=$sha node=$node_bin plist=$plist"

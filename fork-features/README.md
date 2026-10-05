@@ -76,3 +76,26 @@ The code is in
 [`packages/app/src/fork-features/self-hosted/`](../packages/app/src/fork-features/self-hosted/).
 The reverse proxy and the manifest belong to the deployment,
 `mouriya-s-lab/homelab-apps` `stacks/paseo/`.
+
+## Operator Mac daemon
+
+The Mac mini daemon (`~/.paseo`, enrolled in the self-hosted Hub as `macmini`)
+runs this fork, built locally from a pinned commit, because Hub workflows use
+omp and only the fork accepts Hub's exact MCP preapproval for omp (see
+[`trunk-patches.md`](trunk-patches.md)). It is a local build, not a published
+artifact. The desktop app stays installed as a client with
+`manageBuiltInDaemon: false`, so it never starts its bundled daemon on the same
+home.
+
+```bash
+fork-features/macos-daemon/install.sh <git-ref>            # launchd LaunchAgent sh.paseo.fork-daemon
+fork-features/macos-daemon/install.sh --session <git-ref>  # detached from this terminal
+```
+
+Each commit builds once into `~/.local/share/paseo-fork-daemon/releases/<sha>`;
+`current` points at the running one and `bin/paseo` is the CLI that agents and
+the github-agent-router SSH gate call. The agents' checkouts sit on the separate
+`~/Ext` volume, which macOS privacy blocks for launchd-started processes until
+the operator allows the pinned node binary once in System Settings > Privacy &
+Security. Before that, use `--session` from a terminal that already has access;
+that daemon does not survive a logout or reboot.
