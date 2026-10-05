@@ -102,5 +102,8 @@ connections from the proxy.
 
 The deployment owns the inventory. `mouriya-s-lab/homelab-apps`
 `stacks/paseo/compose.yaml` declares it inline as a Compose `configs` entry
-mounted at `/etc/paseo/daemons.json`. Changing the inventory needs a container
-recreate, not a new image; browsers pick up the change on their next load.
+mounted at `/etc/paseo/daemons.json`. Changing the inventory needs a new
+container, not a new image: Compose does not detect a changed `configs.content`,
+so recreate explicitly (`docker compose up -d --force-recreate web`; the Komodo
+Stack passes `--force-recreate`). Browsers pick up the change on their next
+load.
