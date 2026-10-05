@@ -16,7 +16,6 @@ const MANIFEST_FILE = "/usr/share/nginx/html/_paseo/hosts.json";
 const DAEMON_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const DNS_HOSTNAME =
   /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$/iu;
-const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/u;
 
 /**
  * @typedef {object} DaemonDefinition
@@ -95,32 +94,7 @@ function validateLabel(value, index) {
  * @returns {{ authority: string, origin: string, upstream: string }}
  */
 function validateUpstream(value, index) {
-  if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
-    invalid(`daemons[${index}].upstream must be an HTTP origin`);
-  }
-  if (CONTROL_CHARACTER.test(value) || !value.startsWith("http://")) {
-    invalid(`daemons[${index}].upstream must be an HTTP origin`);
-  }
-
-  const rawAuthority = value.slice("http://".length);
-  const authority = rawAuthority.endsWith("/") ? rawAuthority.slice(0, -1) : rawAuthority;
-  if (
-    authority.length === 0 ||
-    authority.includes("/") ||
-    authority.includes("\\") ||
-    authority.includes("?") ||
-    authority.includes("#") ||
-    /\s/u.test(authority)
-  ) {
-    invalid(`daemons[${index}].upstream must not contain a path, query, fragment, or whitespace`);
-  }
-
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    invalid(`daemons[${index}].upstream must be a valid HTTP origin`);
-  }
+  const parsed = parseUpstreamUrl(value, index);
 
   if (
     parsed.protocol !== "http:" ||
@@ -148,6 +122,53 @@ function validateUpstream(value, index) {
     origin: `http://${parsed.host}`,
     upstream: `http://${parsed.host}`,
   };
+}
+
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
+function hasControlCharacter(value) {
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code <= 0x1f || code === 0x7f) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * @param {unknown} value
+ * @param {number} index
+ * @returns {URL}
+ */
+function parseUpstreamUrl(value, index) {
+  if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
+    invalid(`daemons[${index}].upstream must be an HTTP origin`);
+  }
+  if (hasControlCharacter(value) || !value.startsWith("http://")) {
+    invalid(`daemons[${index}].upstream must be an HTTP origin`);
+  }
+
+  const rawAuthority = value.slice("http://".length);
+  const authority = rawAuthority.endsWith("/") ? rawAuthority.slice(0, -1) : rawAuthority;
+  if (
+    authority.length === 0 ||
+    authority.includes("/") ||
+    authority.includes("\\") ||
+    authority.includes("?") ||
+    authority.includes("#") ||
+    /\s/u.test(authority)
+  ) {
+    invalid(`daemons[${index}].upstream must not contain a path, query, fragment, or whitespace`);
+  }
+
+  try {
+    return new URL(value);
+  } catch {
+    invalid(`daemons[${index}].upstream must be a valid HTTP origin`);
+  }
 }
 
 /**
@@ -346,7 +367,7 @@ function main() {
     parsed = JSON.parse(readFileSync(DAEMONS_FILE, "utf8"));
   } catch (error) {
     const reason = error instanceof SyntaxError ? "must contain valid JSON" : "could not be read";
-    throw new Error(`${DAEMONS_FILE} ${reason}`);
+    throw new Error(`${DAEMONS_FILE} ${reason}`, { cause: error });
   }
 
   // No output is touched until the complete input has passed validation.
