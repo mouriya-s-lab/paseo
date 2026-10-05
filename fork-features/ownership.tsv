@@ -27,6 +27,7 @@ docs/testing.md	fork-owned	Fork CI verification boundary
 .agents/skills/release-beta/SKILL.md	fork-owned	Fork prerelease policy
 .agents/skills/release-stable/SKILL.md	fork-owned	Fork stable policy
 .claude/rules/paseo-fork-release.rule.md	fork-owned	Fork release and placement policy
+.claude/rules/paseo-fork-purpose.rule.md	fork-owned	Why the fork exists: split web/daemon self-hosting first, personal customization second
 .github/actionlint.yaml	fork-owned	Declares the self-hosted GARM labels for workflow validation
 docker/base/Dockerfile	trunk-patch	No Docker build extension seam; inject fork web-build settings and enforce the release version
 packages/app/src/hooks/use-file-download.ts	trunk-patch	Download action has no transport binding seam; pass the active host connection identity
