@@ -102,27 +102,6 @@ describe("resolveWorkspaceScriptLink", () => {
     });
   });
 
-  it("does not invent a direct service route for a proxied daemon", () => {
-    const script = {
-      ...runningService,
-      localProxyUrl: null,
-      publicProxyUrl: null,
-      proxyUrl: null,
-    };
-    expect(
-      resolveLink(
-        {
-          type: "directTcp",
-          endpoint: "paseo.example.com:443",
-          display: "paseo.example.com:443",
-          useTls: true,
-          basePath: "/daemons/alpha",
-        },
-        script,
-      ),
-    ).toEqual({ primary: null, targets: [] });
-  });
-
   it("offers the reverse proxy and direct route over a direct network connection", () => {
     const publicUrl = "https://web--feature--paseo.services.example.com";
     expect(

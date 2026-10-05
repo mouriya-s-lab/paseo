@@ -10,31 +10,22 @@ packages/app/src/stores/download-store.ts	trunk-patch	Download URL derivation ha
 packages/app/src/utils/test-daemon-connection.ts	trunk-patch	Direct TCP probe config has no provider seam; preserve proxy basePath
 packages/protocol/src/daemon-endpoints.ts	trunk-patch	Endpoint URL builder has no provider seam; add validated optional proxy basePath
 packages/protocol/src/host-connection-schema.ts	trunk-patch	Direct TCP wire/storage schema has no provider seam; add backward-compatible optional basePath
-scripts/fork-release-version.mjs	fork-owned	Automatic upstream-base and fork-suffix release resolver
-scripts/fork-release-version.test.mjs	fork-owned	Resolver allocation and idempotency coverage
-.github/workflows/docker.yml	fork-owned	Docker-only self-hosted build and automatic fork tag/image publication
-README.md	fork-owned	Fork Docker image quick start
-README.ko.md	fork-owned	Fork Docker image quick start in Korean
-docker/README.md	fork-owned	Fork Docker image usage and child-image example
-docker/docker-compose.example.yml	fork-owned	Fork GHCR image Compose example
-docker/Dockerfile.agents.example	fork-owned	Fork GHCR child-image example
-public-docs/docker.md	fork-owned	Public fork Docker documentation
-public-docs/index.md	fork-owned	Public fork Docker quick start
-docs/docker.md	fork-owned	Fork Docker runtime and release boundary
-docs/release.md	fork-owned	Docker-only fork release policy
-docs/android.md	fork-owned	Documents that native release automation is absent
-docs/testing.md	fork-owned	Fork CI verification boundary
-.agents/skills/release-beta/SKILL.md	fork-owned	Fork prerelease policy
-.agents/skills/release-stable/SKILL.md	fork-owned	Fork stable policy
+fork-features/release/fork-release-version.mjs	fork-owned	Automatic upstream-base and fork-suffix release resolver
+fork-features/release/fork-release-version.test.mjs	fork-owned	Resolver allocation and idempotency coverage
+fork-features/README.md	fork-owned	Fork release, sync, and split-deployment notes
+.github/workflows/fork-docker.yml	fork-owned	Docker-only build and automatic fork tag/image publication
+.github/workflows/docker.yml	fork-deleted	Upstream Docker publication; replaced by fork-docker.yml
+.agents/skills/release-beta/SKILL.md	fork-deleted	Upstream manual beta release procedure; the fork releases automatically
+.agents/skills/release-stable/SKILL.md	fork-deleted	Upstream manual stable release procedure; the fork releases automatically
 .claude/rules/paseo-fork-release.rule.md	fork-owned	Fork release and placement policy
 .claude/rules/paseo-fork-purpose.rule.md	fork-owned	Why the fork exists: split web/daemon self-hosting first, personal customization second
 .github/actionlint.yaml	fork-owned	Declares the self-hosted GARM labels for workflow validation
 docker/base/Dockerfile	trunk-patch	No Docker build extension seam; inject fork web-build settings and enforce the release version
 packages/app/src/hooks/use-file-download.ts	trunk-patch	Download action has no transport binding seam; pass the active host connection identity
 packages/app/src/utils/workspace-script-links.ts	trunk-patch	Managed proxy connections cannot expose direct workspace service ports; suppress invalid direct targets and honor TLS
-packages/app/src/utils/workspace-script-links.test.ts	fork-owned	Regression coverage for managed proxy workspace links
-packages/protocol/src/daemon-endpoints.test.ts	fork-owned	Regression coverage for validated proxy endpoint paths
-packages/app/src/stores/download-store.test.ts	fork-owned	Regression coverage for active connection download URL binding
+packages/app/src/fork-features/self-hosted/workspace-script-links.test.ts	fork-owned	Regression coverage for managed proxy workspace links
+packages/protocol/src/fork-features/self-hosted/daemon-endpoints.test.ts	fork-owned	Regression coverage for validated proxy endpoint paths
+packages/app/src/fork-features/self-hosted/download-store.test.ts	fork-owned	Regression coverage for active connection download URL binding
 fork-features/upstream-sync/sync-merge.mjs	fork-owned	Upstream sync planner: keeps fork-deleted paths deleted, routes other conflicts and new upstream workflows to review
 fork-features/upstream-sync/sync-merge.test.mjs	fork-owned	Planner coverage against real git merges
 .github/workflows/sync-upstream.yml	fork-owned	Upstream sync PR automation driven by the sync planner

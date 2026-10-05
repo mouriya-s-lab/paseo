@@ -15,7 +15,7 @@ alwaysApply: true
 ## Fork 发布
 
 - 这个 fork 只发布 Docker 镜像，不发布 npm、Desktop、Android、iOS/EAS、Nix、网站或 relay 构建产物。
-- `.github/workflows/docker.yml` 在自有 GARM runner 上执行唯一的构建发布路径：同仓库 PR 只构建不推送；`main` push、每小时 upstream tag 检查和 `main` 上的手动 dispatch 执行发布。
+- `.github/workflows/fork-docker.yml` 在自有 GARM runner 上执行唯一的构建发布路径：同仓库 PR 只构建不推送；`main` push、每小时 upstream tag 检查和 `main` 上的手动 dispatch 执行发布。上游的 `docker.yml` 与 release skill 已删除。
 - workflow 从当前 `main` 可达的最高 upstream `vX.Y.Z` 或 prerelease tag 解析基础版本；root `package.json` 必须与该基础版本一致。
 - upstream 基础版本使用 `vX.Y.Z-fork.N`，`N` 从 `0` 开始；同一 commit 重试复用已有 fork tag，其他 fork commit 使用该基础版本的最大后缀加一。
 - 稳定基础版本同时发布 `registry.237575.xyz/paseo/paseo:X.Y.Z-fork.N` 和 `latest`；prerelease 只发布精确版本镜像，不移动 `latest`。
@@ -30,8 +30,9 @@ alwaysApply: true
 - 修改上游文件前先寻找 `register*`、handler、provider 或 callback 扩展点；有扩展点就从 `fork-features/` 注册。
 - 没有扩展点时，只保留使 fork 模块进入执行路径的最小接入改动，并在 `fork-features/trunk-patches.md` 记录文件/符号、缺失的 seam、无法抽出的原因和验证方式。
 - 每次上游同步都重新检查这些接入点；上游提供原生实现或注册 seam 后，迁移到 `fork-features/` 或删除过时 patch。
+- 不改上游拥有的文档（`README*.md`、`docs/`、`public-docs/`、`docker/` 下的示例），保持与上游一致；fork 的说明写进 `fork-features/README.md`。`docs/release.md` 等上游文档描述的是上游自己的发布流程，不适用于本 fork。
 
 ## 边界
 
-- Fork 定制的放置规则归全局 `fork-customization-placement` rule；发布细节归 `docs/release.md` 与 release skill。本 rule 只补充 Paseo fork 的入口/出口边界，不复制它们的内容。
+- Fork 定制的放置规则归全局 `fork-customization-placement` rule；发布细节归 `fork-features/README.md`。本 rule 只补充 Paseo fork 的入口/出口边界，不复制它们的内容。
 - GitHub 账号、PAT 和 workflow 权限遵循全局 GitHub 与凭据规则；不要把 token 写入仓库或对话。

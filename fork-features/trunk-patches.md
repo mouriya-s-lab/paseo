@@ -48,9 +48,14 @@ Verification for each rebase:
 
 The fork publishes Docker only, so upstream automation for npm, Nix, relay,
 website, Desktop, Android/EAS, release-note synchronization, and path filtering
-is intentionally absent. The deleted paths are the `fork-deleted` rows in
+is intentionally absent, together with upstream's own `docker.yml` and its
+manual release skills. The deleted paths are the `fork-deleted` rows in
 [`ownership.tsv`](ownership.tsv). Do not restore them unless the fork release
 boundary changes.
+
+Upstream documentation (`README*.md`, `docs/`, `public-docs/`, `docker/`
+examples) is kept byte-identical to upstream so that syncs merge cleanly. Fork
+release and deployment notes live in [`README.md`](README.md) instead.
 
 `.github/workflows/sync-upstream.yml` plans each sync with
 [`upstream-sync/sync-merge.mjs`](upstream-sync/sync-merge.mjs), which reads

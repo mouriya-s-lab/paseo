@@ -15,7 +15,7 @@ const FORK_LIKE_RE = /^v.+-fork\.\d+$/;
 const FORK_TAG_RE = /^v(.+)-fork\.(\d+)$/;
 
 const USAGE =
-  "Usage: node scripts/fork-release-version.mjs [--ref <commit>] [--fetch] [--remote <name>] [<commit>]\n" +
+  "Usage: node fork-features/release/fork-release-version.mjs [--ref <commit>] [--fetch] [--remote <name>] [<commit>]\n" +
   "Resolves the highest reachable upstream release tag and prints one JSON object:\n" +
   '{"releaseTag","imageTag","baseVersion","upstreamTag","publishLatest","alreadyPublished"}';
 
@@ -306,7 +306,7 @@ export function chooseForkRelease({ currentCommit, upstreamCandidates, forkTags 
   };
 }
 
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 function runGitOutput(args) {
   try {
