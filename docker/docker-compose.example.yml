@@ -4,7 +4,7 @@
 # For any network-reachable deployment, change PASEO_PASSWORD first.
 services:
   paseo:
-    image: registry.237575.xyz/paseo/paseo:latest
+    image: ghcr.io/mouriya-s-lab/paseo:latest
     container_name: paseo
     restart: unless-stopped
     ports:

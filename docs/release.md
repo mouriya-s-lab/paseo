@@ -1,9 +1,9 @@
 # Fork release
 
 This repository is a fork of `getpaseo/paseo`. It publishes one runtime
-artifact: the Docker image. npm packages, Desktop, Android/iOS/EAS, Nix,
-website, relay, and GitHub Release assets are not built or published by this
-fork.
+artifact: the public Docker image `ghcr.io/mouriya-s-lab/paseo`. npm packages,
+Desktop, Android/iOS/EAS, Nix, website, relay, and GitHub Release assets are not
+built or published by this fork.
 
 ## Release source
 
@@ -31,7 +31,8 @@ while the edge pool is disabled. The label is owned by
 
 - A same-repository pull request builds a native `linux/amd64` image without
   logging in or pushing.
-- Every push to `main` resolves and publishes the current fork release.
+- Every push to `main` resolves the current fork release and pushes it to GHCR
+  with the workflow's `GITHUB_TOKEN`.
 - An hourly schedule catches new upstream tags after the sync workflow lands
   them in `main`.
 - A manual dispatch on `main` runs the same release path.

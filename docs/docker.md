@@ -24,11 +24,7 @@ Host-side CLI commands select the container explicitly, for example `paseo proje
 
 ## Quick start
 
-The image lives in the private registry — log in first. The Docker password is a short-lived Keycloak access token (refreshed by your deployment plane, ~30 min TTL):
-
-```bash
-echo "$REGISTRY_TOKEN" | docker login registry.237575.xyz -u sa-registry --password-stdin
-```
+The image is public at `ghcr.io/mouriya-s-lab/paseo`; no registry login is needed.
 
 ```bash
 docker run -d --name paseo \
@@ -36,7 +32,7 @@ docker run -d --name paseo \
   -e PASEO_PASSWORD=change-me \
   -v "$PWD/paseo-home:/home/paseo" \
   -v "$PWD:/workspace" \
-  registry.237575.xyz/paseo/paseo:latest
+  ghcr.io/mouriya-s-lab/paseo:latest
 ```
 
 Then open:
@@ -63,7 +59,7 @@ Minimal example:
 ```yaml
 services:
   paseo:
-    image: registry.237575.xyz/paseo/paseo:latest
+    image: ghcr.io/mouriya-s-lab/paseo:latest
     restart: unless-stopped
     ports:
       - "6767:6767"
@@ -80,7 +76,7 @@ The base image does not preinstall Claude Code, Codex, OpenCode, Copilot, Pi, or
 other agent CLIs. Create a child image for the agents you use:
 
 ```Dockerfile
-FROM registry.237575.xyz/paseo/paseo:latest
+FROM ghcr.io/mouriya-s-lab/paseo:latest
 
 USER root
 RUN npm install -g @openai/codex @anthropic-ai/claude-code opencode-ai

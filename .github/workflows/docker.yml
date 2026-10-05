@@ -27,8 +27,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  REGISTRY: registry.237575.xyz
-  IMAGE: registry.237575.xyz/paseo/paseo
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/mouriya-s-lab/paseo
   UPSTREAM_REPOSITORY: https://github.com/getpaseo/paseo.git
 
 jobs:
@@ -44,6 +44,7 @@ jobs:
     runs-on: [self-hosted, linux, vctcn, netbird, x64, cachyos]
     permissions:
       contents: write
+      packages: write
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -117,21 +118,15 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Fetch registry token
-        id: registry-token
+      - name: Log in to GHCR
         if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        uses: Mouriya-Emma/keycloak-token-action@v1
+        uses: docker/login-action@v3
         with:
-          keycloak-url: https://keycloak.237575.xyz
-          realm: registry
-          client-id: registry
-          client-secret: ${{ secrets.KEYCLOAK_REGISTRY_CLIENT_SECRET }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Log in to private registry
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        run: echo "${{ steps.registry-token.outputs.access-token }}" | docker login "$REGISTRY" -u sa-registry --password-stdin
-
-      - name: Build Docker image
+      - name: Build and publish Docker image
         if: steps.values.outputs.skip != 'true'
         uses: docker/build-push-action@v7
         with:
@@ -146,29 +141,10 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          push: false
-          load: ${{ steps.values.outputs.push == 'true' }}
+          push: ${{ steps.values.outputs.push == 'true' }}
           provenance: false
           cache-from: type=gha,scope=paseo-fork
           cache-to: type=gha,scope=paseo-fork,mode=max
-
-      # Push from the runner's Docker daemon: registry-mesh-hosts.sh writes the
-      # registry mesh override into the runner instance's /etc/hosts. BuildKit's
-      # builder container instead resolves the public IP via embedded DNS; the
-      # resident runner on OVH cannot hairpin to it.
-      # GARM self-hosted runners use resident LXD on VM 181 or edge Incus on the
-      # operator's laptop; mesh reachability comes from that host's NetBird peer.
-      # See https://github.com/mouriya-s-lab/pve-vctcn/blob/main/apps/runner/README.md#边缘-incus-providergarm-edge-incus
-      - name: Push image to private registry
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        env:
-          TAGS: ${{ steps.values.outputs.tags }}
-        run: |
-          set -euo pipefail
-          while IFS= read -r tag; do
-            test -n "$tag"
-            docker push "$tag"
-          done <<< "$TAGS"
 
       - name: Verify published image
         if: github.event_name != 'pull_request' && steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
