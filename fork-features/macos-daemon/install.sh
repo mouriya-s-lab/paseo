@@ -25,6 +25,8 @@ if [[ ! -f "$release/packages/server/dist/scripts/supervisor-entrypoint.js" ]]; 
   rm -rf "$release"
   git -C "$root/repo" worktree prune
   git -C "$root/repo" worktree add --quiet --detach "$release" "$sha"
+  # mise refuses an untrusted checkout config, which would leave node unresolved.
+  if command -v mise >/dev/null 2>&1; then mise trust --quiet "$release"; fi
   /bin/zsh -i -l -c 'cd "$1" && npm ci --no-audit --no-fund && npm run build:server' _ "$release"
 fi
 node_bin=$(/bin/zsh -i -l -c 'cd "$1" && node -p process.execPath' _ "$release" | tail -n 1)
