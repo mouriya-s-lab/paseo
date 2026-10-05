@@ -78,7 +78,7 @@ function validateLabel(value, index) {
     typeof value !== "string" ||
     value.length === 0 ||
     value.trim() !== value ||
-    CONTROL_CHARACTER.test(value)
+    hasControlCharacter(value)
   ) {
     invalid(`daemons[${index}].label must be a non-empty string without control characters`);
   }
