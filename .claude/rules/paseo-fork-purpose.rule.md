@@ -18,9 +18,10 @@ alwaysApply: true
 
 ## 验证
 
-- 触及分离部署路径的改动（连接、host 注册表、URL 构建、下载、服务链接、web 构建参数）必须在真实分离拓扑里走浏览器路径验证：web origin 加代理后的至少两个 daemon，观察实际 WebSocket 走 `/daemons/<id>`、刷新后持久化正确、manifest 移除后不复现。单元测试不能替代。
-- 分离部署的反向代理和 manifest 由 `mouriya-s-lab/homelab-apps` 的 `stacks/paseo/` 拥有；本仓库只提供 web 与 daemon 两端的代码和镜像。
+- 触及分离部署路径的改动（连接、host 注册表、URL 构建、下载、服务链接、web 构建参数、web 镜像的代理与 manifest 生成）必须在真实分离拓扑里走浏览器路径验证：web origin 加代理后的至少两个 daemon，观察实际 WebSocket 走 `/daemons/<id>`、刷新后持久化正确、manifest 移除后不复现。单元测试不能替代。
 
 ## 边界
 
+- 本仓库发布分离部署的两种镜像：daemon 镜像，以及 web 镜像（self-hosted 模式的浏览器 bundle，加上启动时从 daemon 清单生成 `/daemons/<id>` 反向代理和 `/_paseo/hosts.json` 的逻辑）。manifest 的格式由本仓库的 web 代码解析，所以生成它的代码也放在本仓库。
+- 部署方 `mouriya-s-lab/homelab-apps` 的 `stacks/paseo/compose.yaml` 声明 daemon 清单（id、名称、上游地址）、服务、密钥和上线方式，不再自己构建 web 镜像或持有代理生成逻辑。
 - 定制代码放在哪里、上游同步与发布怎么做，见 `paseo-fork-release.rule.md`。本 rule 只说明 fork 为什么存在，以及由此产生的取舍。

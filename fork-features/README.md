@@ -15,10 +15,17 @@ upstream file.
 
 ## Release
 
-The fork publishes one artifact: the Docker image
-`registry.237575.xyz/paseo/paseo`. It builds no npm, Desktop, Android/iOS/EAS,
-Nix, website, relay, or GitHub Release artifacts, and upstream's release
-workflows and skills are deleted.
+The fork publishes two Docker images, one per role of the split deployment,
+always as a pair under the same tag:
+
+- `registry.237575.xyz/paseo/paseo` — the daemon, from
+  [`docker/base/Dockerfile`](../docker/base/Dockerfile).
+- `registry.237575.xyz/paseo/paseo-web` — the web origin, from
+  [`web-image/Dockerfile`](web-image/Dockerfile). See
+  [Split web/daemon deployment](#split-webdaemon-deployment).
+
+It builds no npm, Desktop, Android/iOS/EAS, Nix, website, relay, or GitHub
+Release artifacts, and upstream's release workflows and skills are deleted.
 
 [`.github/workflows/fork-docker.yml`](../.github/workflows/fork-docker.yml) is
 the only release workflow. It runs on the GARM edge runner on the CachyOS laptop
@@ -26,20 +33,22 @@ the only release workflow. It runs on the GARM edge runner on the CachyOS laptop
 VM 181 runners share 4 GiB and `expo export --platform web` is OOM-killed there.
 The label is owned by `mouriya-s-lab/pve-vctcn` `apps/runner`.
 
-- A same-repository pull request builds the image without pushing.
+- A same-repository pull request builds both images without pushing.
 - A push to `main`, the hourly schedule, and a manual dispatch on `main` publish
   the current fork release.
 - Pull requests from other repositories never run on the mesh runner.
 
-The image is pushed before the Git tag is created, so a failed build leaves no
-release tag.
+Both images build sequentially in one job. Both exact tags are pushed and their
+revision labels verified before either `latest` moves, and the Git tag is
+created last, so a failed build or push leaves no release tag and a retry
+publishes the whole pair. Deployments pin the exact tag, not `latest`.
 
 ### Versions
 
 [`release/fork-release-version.mjs`](release/fork-release-version.mjs) picks the
 highest upstream release tag reachable from the commit (`vX.Y.Z` or
-`vX.Y.Z-<identifier>`). The root `package.json` version must equal it, and the
-Dockerfile asserts this again through `PASEO_VERSION`. The fork tag is
+`vX.Y.Z-<identifier>`). The root `package.json` version must equal it, and both
+Dockerfiles assert this again through `PASEO_VERSION`. The fork tag is
 `v<base>-fork.N`, with `N` starting at `0` per base and reused when the same
 commit is retried. Image tags drop the leading `v`. A stable base also moves
 `latest`; a prerelease never does.
@@ -74,5 +83,24 @@ The browser bundle built with `EXPO_PUBLIC_PASEO_SELFHOSTED=true` reads
 
 The code is in
 [`packages/app/src/fork-features/self-hosted/`](../packages/app/src/fork-features/self-hosted/).
-The reverse proxy and the manifest belong to the deployment,
-`mouriya-s-lab/homelab-apps` `stacks/paseo/`.
+
+The web image serves that bundle with nginx on port 6767. At startup,
+[`web-image/generate-config.mjs`](web-image/generate-config.mjs) reads the
+daemon inventory from `/etc/paseo/daemons.json`, validates it, and writes the
+nginx routes and `/_paseo/hosts.json`; an invalid inventory stops the container
+before nginx starts. Each inventory entry has exactly these fields:
+
+```json
+[{ "id": "alpha", "label": "Alpha", "upstream": "http://192.168.1.10:6767" }]
+```
+
+`id` is a lowercase slug, `upstream` an `http` origin without credentials or
+path. The proxy strips `/daemons/<id>` and rewrites `Host` and `Origin` to the
+upstream, so daemons need no CORS entry for the web origin. The manifest has no
+password field: a daemon behind the web image must accept unauthenticated
+connections from the proxy.
+
+The deployment owns the inventory. `mouriya-s-lab/homelab-apps`
+`stacks/paseo/compose.yaml` declares it inline as a Compose `configs` entry
+mounted at `/etc/paseo/daemons.json`. Changing the inventory needs a container
+recreate, not a new image; browsers pick up the change on their next load.

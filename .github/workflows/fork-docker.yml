@@ -30,6 +30,7 @@ concurrency:
 env:
   REGISTRY: registry.237575.xyz
   IMAGE: registry.237575.xyz/paseo/paseo
+  WEB_IMAGE: registry.237575.xyz/paseo/paseo-web
   UPSTREAM_REPOSITORY: https://github.com/getpaseo/paseo.git
 
 jobs:
@@ -110,12 +111,6 @@ jobs:
             echo "skip=$skip"
             echo "publish_latest=$publish_latest"
             echo "release_tag=$RELEASE_TAG"
-            echo "tags<<EOF"
-            echo "$IMAGE:$image_tag"
-            if [[ "$publish_latest" == "true" ]]; then
-              echo "$IMAGE:latest"
-            fi
-            echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
       - name: Fetch registry token
@@ -132,7 +127,10 @@ jobs:
         if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
         run: echo "${{ steps.registry-token.outputs.access-token }}" | docker login "$REGISTRY" -u sa-registry --password-stdin
 
-      - name: Build Docker image
+      # The two role images are one release: both are built, pushed and verified
+      # under the same exact tag before either `latest` moves and before the fork
+      # Git tag exists. They build sequentially; each runs a full Expo export.
+      - name: Build daemon image
         if: steps.values.outputs.skip != 'true'
         uses: docker/build-push-action@v7
         with:
@@ -143,7 +141,7 @@ jobs:
             PASEO_VERSION=${{ steps.values.outputs.base_version }}
             EXPO_PUBLIC_PASEO_SELFHOSTED=false
             EXPO_PUBLIC_LOCAL_DAEMON=self-hosted
-          tags: ${{ steps.values.outputs.tags }}
+          tags: ${{ env.IMAGE }}:${{ steps.values.outputs.image_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -153,6 +151,25 @@ jobs:
           cache-from: type=gha,scope=paseo-fork
           cache-to: type=gha,scope=paseo-fork,mode=max
 
+      - name: Build web image
+        if: steps.values.outputs.skip != 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: fork-features/web-image/Dockerfile
+          platforms: linux/amd64
+          build-args: |
+            PASEO_VERSION=${{ steps.values.outputs.base_version }}
+          tags: ${{ env.WEB_IMAGE }}:${{ steps.values.outputs.image_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          push: false
+          load: ${{ steps.values.outputs.push == 'true' }}
+          provenance: false
+          cache-from: type=gha,scope=paseo-fork-web
+          cache-to: type=gha,scope=paseo-fork-web,mode=max
+
       # Push from the runner's Docker daemon: registry-mesh-hosts.sh writes the
       # registry mesh override into the runner instance's /etc/hosts. BuildKit's
       # builder container instead resolves the public IP via embedded DNS; the
@@ -160,30 +177,39 @@ jobs:
       # GARM self-hosted runners use resident LXD on VM 181 or edge Incus on the
       # operator's laptop; mesh reachability comes from that host's NetBird peer.
       # See https://github.com/mouriya-s-lab/pve-vctcn/blob/main/apps/runner/README.md#边缘-incus-providergarm-edge-incus
-      - name: Push image to private registry
+      - name: Push exact tags to private registry
         if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
         env:
-          TAGS: ${{ steps.values.outputs.tags }}
+          IMAGE_TAG: ${{ steps.values.outputs.image_tag }}
         run: |
           set -euo pipefail
-          while IFS= read -r tag; do
-            test -n "$tag"
-            docker push "$tag"
-          done <<< "$TAGS"
+          for image in "$IMAGE" "$WEB_IMAGE"; do
+            docker push "$image:$IMAGE_TAG"
+          done
 
-      - name: Verify published image
-        if: github.event_name != 'pull_request' && steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
+      - name: Verify published exact tags
+        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
         env:
           IMAGE_TAG: ${{ steps.values.outputs.image_tag }}
-          PUBLISH_LATEST: ${{ steps.values.outputs.publish_latest }}
         run: |
           set -euo pipefail
-          docker pull "$IMAGE:$IMAGE_TAG"
-          docker image inspect "$IMAGE:$IMAGE_TAG" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' | grep -Fx "$GITHUB_SHA"
-          if [[ "$PUBLISH_LATEST" == "true" ]]; then
-            docker pull "$IMAGE:latest"
-            test "$(docker image inspect "$IMAGE:$IMAGE_TAG" --format '{{.Id}}')" = "$(docker image inspect "$IMAGE:latest" --format '{{.Id}}')"
-          fi
+          for image in "$IMAGE" "$WEB_IMAGE"; do
+            docker pull "$image:$IMAGE_TAG"
+            test "$(docker image inspect "$image:$IMAGE_TAG" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$GITHUB_SHA"
+          done
+
+      - name: Move latest tags
+        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true' && steps.values.outputs.publish_latest == 'true'
+        env:
+          IMAGE_TAG: ${{ steps.values.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          for image in "$IMAGE" "$WEB_IMAGE"; do
+            docker tag "$image:$IMAGE_TAG" "$image:latest"
+            docker push "$image:latest"
+            docker pull "$image:latest"
+            test "$(docker image inspect "$image:$IMAGE_TAG" --format '{{.Id}}')" = "$(docker image inspect "$image:latest" --format '{{.Id}}')"
+          done
 
       - name: Tag the published fork commit
         if: github.event_name != 'pull_request' && steps.values.outputs.skip != 'true'

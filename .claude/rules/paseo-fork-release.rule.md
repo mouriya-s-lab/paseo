@@ -14,12 +14,12 @@ alwaysApply: true
 
 ## Fork 发布
 
-- 这个 fork 只发布 Docker 镜像，不发布 npm、Desktop、Android、iOS/EAS、Nix、网站或 relay 构建产物。
+- 这个 fork 只发布 Docker 镜像：daemon 镜像 `registry.237575.xyz/paseo/paseo` 和 web 镜像 `registry.237575.xyz/paseo/paseo-web`，两者同一 commit、同一 tag 成对发布。不发布 npm、Desktop、Android、iOS/EAS、Nix、网站或 relay 构建产物。
 - `.github/workflows/fork-docker.yml` 在自有 GARM runner 上执行唯一的构建发布路径：同仓库 PR 只构建不推送；`main` push、每小时 upstream tag 检查和 `main` 上的手动 dispatch 执行发布。上游的 `docker.yml` 与 release skill 已删除。
 - workflow 从当前 `main` 可达的最高 upstream `vX.Y.Z` 或 prerelease tag 解析基础版本；root `package.json` 必须与该基础版本一致。
 - upstream 基础版本使用 `vX.Y.Z-fork.N`，`N` 从 `0` 开始；同一 commit 重试复用已有 fork tag，其他 fork commit 使用该基础版本的最大后缀加一。
-- 稳定基础版本同时发布 `registry.237575.xyz/paseo/paseo:X.Y.Z-fork.N` 和 `latest`；prerelease 只发布精确版本镜像，不移动 `latest`。
-- 镜像构建成功后才创建并推送 fork tag；失败时不留下未构建的 release tag。
+- 稳定基础版本同时发布两个镜像的 `X.Y.Z-fork.N` 和 `latest`；prerelease 只发布精确版本镜像，不移动 `latest`。两个精确 tag 都推送并核对 revision 后才移动 `latest`。
+- 两个镜像都构建、推送成功后才创建并推送 fork tag；失败时不留下未构建的 release tag。
 - registry 登录用短时 Keycloak token 经 `sa-registry` 登录；`KEYCLOAK_REGISTRY_CLIENT_SECRET` 由 IaC 同步到仓库 secret，禁止手写、粘贴或提交。
 - 不运行上游的 npm、Desktop、Android、EAS、Nix、网站或 relay release 命令；Docker 之外的 Actions 已移除。
 

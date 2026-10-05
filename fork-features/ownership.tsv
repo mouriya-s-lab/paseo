@@ -13,6 +13,9 @@ packages/protocol/src/host-connection-schema.ts	trunk-patch	Direct TCP wire/stor
 fork-features/release/fork-release-version.mjs	fork-owned	Automatic upstream-base and fork-suffix release resolver
 fork-features/release/fork-release-version.test.mjs	fork-owned	Resolver allocation and idempotency coverage
 fork-features/README.md	fork-owned	Fork release, sync, and split-deployment notes
+fork-features/web-image/Dockerfile	fork-owned	Split-deployment web role image: self-hosted browser bundle plus nginx proxy
+fork-features/web-image/generate-config.mjs	fork-owned	Renders nginx daemon routes and /_paseo/hosts.json from the deployment inventory
+fork-features/web-image/paseo-web-entrypoint.sh	fork-owned	Web image startup: generate, nginx -t, serve
 .github/workflows/fork-docker.yml	fork-owned	Docker-only build and automatic fork tag/image publication
 .github/workflows/docker.yml	fork-deleted	Upstream Docker publication; replaced by fork-docker.yml
 .agents/skills/release-beta/SKILL.md	fork-deleted	Upstream manual beta release procedure; the fork releases automatically
