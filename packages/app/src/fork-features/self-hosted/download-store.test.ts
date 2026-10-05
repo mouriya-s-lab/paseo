@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HostConnection, HostProfile } from "@/types/host-connection";
-import { resolveDaemonDownloadTarget } from "./download-store";
+import { resolveDaemonDownloadTarget } from "@/stores/download-store";
 
 function makeProfile(connections: HostConnection[]): HostProfile {
   return {
