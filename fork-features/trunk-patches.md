@@ -44,6 +44,27 @@ Verification for each rebase:
 - the focused self-hosted runtime and protocol tests
 - the Docker image smoke path, including the web UI's same-origin daemon connection
 
+## OMP exact MCP preapproval
+
+Hub attaches an exact `toolPolicy` for its injected `hub` MCP server to every
+execution agent, and the daemon rejects providers whose contract lacks exact
+preapproval. Upstream grants it only to Claude, Codex, and OpenCode, so a Hub
+workflow cannot run OMP. OMP bridges MCP tools as RPC host tools, and its
+approval gate gives host tools the `exec` tier: only mode `full`
+(`--approval-mode yolo`) runs them without a prompt. The rule lives in
+`packages/server/src/fork-features/omp-exact-mcp-preapproval/policy.ts`, which
+rejects a tool policy in any other mode.
+
+| File                                                      | Symbol or surface                                           | Why a trunk patch remains                                                                                                                        |
+| --------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/server/src/server/agent/provider-registry.ts`   | `PROVIDER_CONTRACTS.omp`                                    | Built-in provider contracts are a closed constant with no registration seam.                                                                     |
+| `packages/server/src/server/agent/providers/omp/agent.ts` | `createSession`, `resumeSession`, `OmpAgentSession.setMode` | The contract hook receives no mode, so the session must refuse a tool policy outside `full` where the mode is resolved, including mode switches. |
+
+Verification for each rebase:
+
+- `npx vitest run src/fork-features/omp-exact-mcp-preapproval/policy.test.ts --bail=1` in `packages/server`
+- a Hub workflow run with an OMP agent that calls `hub.finish_execution`
+
 ## Removed upstream automation
 
 The fork publishes Docker only, so upstream automation for npm, Nix, relay,

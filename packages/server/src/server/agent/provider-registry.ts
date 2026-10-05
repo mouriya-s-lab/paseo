@@ -153,6 +153,9 @@ const PROVIDER_CONTRACTS: Record<string, ProviderContract> = {
   claude: { supportsExactMcpPreapproval: true },
   codex: { supportsExactMcpPreapproval: true },
   opencode: { supportsExactMcpPreapproval: true },
+  // Fork: OMP honours preapproval only in `full` mode; the omp session enforces that via
+  // fork-features/omp-exact-mcp-preapproval (see fork-features/trunk-patches.md).
+  omp: { supportsExactMcpPreapproval: true },
 };
 
 const UNSUPPORTED_PROVIDER_CONTRACT: ProviderContract = {
