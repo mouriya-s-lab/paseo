@@ -19,15 +19,29 @@ on:
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch: {}
+  # Build-only verification of an unpublished commit, used by sync-upstream.yml
+  # before it fast-forwards main. Nothing is pushed or tagged in this mode.
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to build without publishing
+        required: true
+        type: string
+    outputs:
+      built:
+        description: "'true' only when both images built from inputs.ref"
+        value: ${{ jobs.docker.outputs.built }}
 
 permissions:
   contents: read
 
-# Only one pending run per group survives, so a PR build gets its own group:
-# a queued publish or another branch's PR must not replace it.
+# Only one pending run per group survives, so each kind of build gets its own
+# group: a queued publish must not replace a pending sync verification or a
+# PR build, and PR builds of different branches must not replace each other.
 concurrency:
   group: >-
-    ${{ github.event_name == 'pull_request' && format('paseo-docker-pr-{0}', github.ref)
+    ${{ inputs.ref && format('paseo-docker-verify-{0}', inputs.ref)
+    || github.event_name == 'pull_request' && format('paseo-docker-pr-{0}', github.ref)
     || 'paseo-docker-fork' }}
   cancel-in-progress: false
 
@@ -43,25 +57,28 @@ jobs:
     if: >-
       (github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository) &&
-      (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+      (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || inputs.ref)
     # `cachyos` exists only on the edge Incus pool (CachyOS laptop, 30 GiB). The
     # resident VM 181 LXD runners share 4 GiB, which OOM-kills `expo export`
     # (paseo#20, pve-vctcn#300).
     runs-on: [self-hosted, linux, vctcn, netbird, x64, cachyos]
     permissions:
       contents: write
+    outputs:
+      built: ${{ steps.built.outputs.built }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.ref }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Resolve upstream and fork release
         id: release
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && !inputs.ref
         env:
           RELEASE_REF: ${{ github.sha }}
         run: |
@@ -89,11 +106,13 @@ jobs:
           BASE_VERSION: ${{ steps.release.outputs.baseVersion }}
           PUBLISH_LATEST: ${{ steps.release.outputs.publishLatest }}
           ALREADY_PUBLISHED: ${{ steps.release.outputs.alreadyPublished }}
+          VERIFY_REF: ${{ inputs.ref }}
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || -n "$VERIFY_REF" ]]; then
             base_version="$(node -p "require('./package.json').version")"
-            image_tag="pr-${GITHUB_SHA:0:12}"
+            build_sha="$(git rev-parse HEAD)"
+            image_tag="build-${build_sha:0:12}"
             push=false
             skip=false
             publish_latest=false
@@ -174,6 +193,11 @@ jobs:
           cache-from: type=gha,scope=paseo-fork-web
           cache-to: type=gha,scope=paseo-fork-web,mode=max
 
+      - name: Record that both images built
+        id: built
+        if: steps.values.outputs.skip != 'true'
+        run: echo "built=true" >> "$GITHUB_OUTPUT"
+
       # Push from the runner's Docker daemon: registry-mesh-hosts.sh writes the
       # registry mesh override into the runner instance's /etc/hosts. BuildKit's
       # builder container instead resolves the public IP via embedded DNS; the
@@ -216,7 +240,7 @@ jobs:
           done
 
       - name: Tag the published fork commit
-        if: github.event_name != 'pull_request' && steps.values.outputs.skip != 'true'
+        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
         env:
           RELEASE_TAG: ${{ steps.values.outputs.release_tag }}
         run: |

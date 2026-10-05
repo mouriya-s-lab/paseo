@@ -18,6 +18,7 @@ fork-features/web-image/generate-config.mjs	fork-owned	Renders nginx daemon rout
 fork-features/web-image/paseo-web-entrypoint.sh	fork-owned	Web image startup: generate, nginx -t, serve
 .github/workflows/fork-docker.yml	fork-owned	Docker-only build and automatic fork tag/image publication
 .github/workflows/docker.yml	fork-deleted	Upstream Docker publication; replaced by fork-docker.yml
+fork-features/upstream-sync/open-sync-pr.sh	fork-owned	Opens or reuses the labeled sync PR for a fixed sync branch
 .agents/skills/release-beta/SKILL.md	fork-deleted	Upstream manual beta release procedure; the fork releases automatically
 .agents/skills/release-stable/SKILL.md	fork-deleted	Upstream manual stable release procedure; the fork releases automatically
 .claude/rules/paseo-fork-release.rule.md	fork-owned	Fork release and placement policy
@@ -31,7 +32,7 @@ packages/protocol/src/fork-features/self-hosted/daemon-endpoints.test.ts	fork-ow
 packages/app/src/fork-features/self-hosted/download-store.test.ts	fork-owned	Regression coverage for active connection download URL binding
 fork-features/upstream-sync/sync-merge.mjs	fork-owned	Upstream sync planner: keeps fork-deleted paths deleted, routes other conflicts and new upstream workflows to review
 fork-features/upstream-sync/sync-merge.test.mjs	fork-owned	Planner coverage against real git merges
-.github/workflows/sync-upstream.yml	fork-owned	Upstream sync PR automation driven by the sync planner
+.github/workflows/sync-upstream.yml	fork-owned	Upstream sync: build-verified fast-forward of main; PRs only for review or failed builds
 .github/ci-paths.yml	fork-deleted	Upstream CI path filtering; the fork has no upstream CI
 .github/workflows/ci.yml	fork-deleted	Upstream CI on GitHub-hosted runners
 .github/workflows/nix.yml	fork-deleted	Nix build automation; the fork publishes Docker only

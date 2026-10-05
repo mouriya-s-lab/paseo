@@ -68,8 +68,14 @@ fork uses `v*-fork.N`.
 Upstream enters `main` only through
 [`.github/workflows/sync-upstream.yml`](../.github/workflows/sync-upstream.yml),
 planned by [`upstream-sync/sync-merge.mjs`](upstream-sync/sync-merge.mjs). The
-planner keeps `fork-deleted` paths deleted and sends any other conflict, and any
-new upstream workflow file, to a review PR.
+planner merges the longest run of upstream commits that needs no review, keeping
+`fork-deleted` paths deleted. That candidate is built by `fork-docker.yml` in
+build-only mode (`workflow_call` with `ref`); if both images build, the workflow
+fast-forwards `main` to it without a PR, and the `main` push publishes as usual.
+A PR labeled `upstream-sync` opens only when a human is needed: a conflict
+outside the `fork-deleted` paths, a new upstream workflow file (`sync/review`),
+or a candidate that failed to build (`sync/merge`). While such a PR is open,
+sync runs skip.
 
 ## Split web/daemon deployment
 
