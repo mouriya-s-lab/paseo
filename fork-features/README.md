@@ -94,8 +94,15 @@ fork-features/macos-daemon/install.sh --session <git-ref>  # detached from this 
 
 Each commit builds once into `~/.local/share/paseo-fork-daemon/releases/<sha>`;
 `current` points at the running one and `bin/paseo` is the CLI that agents and
-the github-agent-router SSH gate call. The agents' checkouts sit on the separate
-`~/Ext` volume, which macOS privacy blocks for launchd-started processes until
-the operator allows the pinned node binary once in System Settings > Privacy &
-Security. Before that, use `--session` from a terminal that already has access;
-that daemon does not survive a logout or reboot.
+the github-agent-router SSH gate call. The installer copies the node binary to
+`~/.local/share/paseo-fork-daemon/node/<version>/node`, so the CLI runs in an
+SSH session, and installs the `iac-workspace-gate` plugin from the release.
+
+The agents' checkouts sit on the separate `~/Ext` volume, which macOS privacy
+blocks for sshd sessions and launchd-started processes. The router's gate
+therefore never reads the checkout over SSH: it runs `paseo iac-gate <cwd>`,
+and the plugin performs the checks (lock, default branch, remote tip, tracked
+changes, submodules) inside the daemon, which can read the volume. launchd mode
+needs the operator to allow the pinned node binary once in System Settings >
+Privacy & Security. Before that, use `--session` from a terminal that already
+has access; that daemon does not survive a logout or reboot.

@@ -1,0 +1,6 @@
+{
+  "id": "iac-workspace-gate",
+  "requirements": {
+    "paseo": ">=0.11.0-beta.3"
+  }
+}
