@@ -1,0 +1,5 @@
+{
+  "id": "omp-thinking-translation",
+  "requirements": { "paseo": ">=0.9.1" },
+  "description": "Translate completed OMP thinking into Simplified Chinese while retaining the original."
+}
