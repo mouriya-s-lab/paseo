@@ -45,3 +45,8 @@ packages/app/.eas/workflows/release-ios-beta.yml	fork-deleted	EAS iOS beta relea
 packages/app/.eas/workflows/release-mobile.yml	fork-deleted	EAS mobile release; the fork publishes Docker only
 packages/app/.eas/workflows/resubmit-ios-review.yml	fork-deleted	EAS iOS resubmission; the fork publishes Docker only
 scripts/ci-workflow.test.mjs	fork-deleted	Tests for the removed upstream CI workflow
+packages/server/src/fork-features/omp-exact-mcp-preapproval/policy.ts	fork-owned	OMP honours Hub exact MCP preapproval only in full (yolo) mode
+packages/server/src/fork-features/omp-exact-mcp-preapproval/policy.test.ts	fork-owned	Registry acceptance and per-mode enforcement of OMP tool policies
+packages/server/src/server/agent/provider-registry.ts	trunk-patch	Closed built-in provider contract table; declare OMP exact MCP preapproval
+packages/server/src/server/agent/providers/omp/agent.ts	trunk-patch	No mode-aware contract hook; refuse a tool policy outside full at session create/resume/mode switch
+fork-features/macos-daemon/install.sh	fork-owned	Builds a pinned fork commit and runs it as the operator's Mac daemon (launchd or session)

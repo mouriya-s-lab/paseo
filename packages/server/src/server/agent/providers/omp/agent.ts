@@ -78,6 +78,7 @@ import { OmpCliRuntime } from "./cli-runtime.js";
 import { listOmpImportableSessions, readOmpImportSessionConfig } from "./session-descriptor.js";
 import type { OmpRuntime, OmpRuntimeSession, OmpStartSessionInput } from "./runtime.js";
 import { OmpMcpBridge, type OmpBridgedToolIdentity } from "./mcp-bridge.js";
+import { assertOmpToolPolicyMode } from "../../../../fork-features/omp-exact-mcp-preapproval/policy.js";
 import type {
   OmpAgentSessionEvent,
   OmpAgentMessage,
@@ -1006,6 +1007,7 @@ export class OmpAgentSession implements AgentSession {
       throw new Error(`Invalid OMP mode '${modeId}'`);
     }
     if (modeId === this.currentModeId) return;
+    assertOmpToolPolicyMode(modeId, this.config.toolPolicy);
     if (this.activeTurnId || this.state.isStreaming || this.state.isCompacting) {
       return { type: "warning", message: "Change approval mode once the current turn ends" };
     }
@@ -2269,6 +2271,7 @@ export class OmpAgentClient implements AgentClient {
     launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
     const launchMode = this.resolveLaunchMode(config.modeId, config.providerOptions);
+    assertOmpToolPolicyMode(launchMode.modeId, config.toolPolicy);
     const startInput: OmpStartSessionInput = {
       cwd: config.cwd,
       protocolMode: "rpc-ui",
@@ -2345,6 +2348,7 @@ export class OmpAgentClient implements AgentClient {
       resumeConfig.modeId,
       resumeConfig.config.providerOptions,
     );
+    assertOmpToolPolicyMode(launchMode.modeId, resumeConfig.config.toolPolicy);
     const startInput = buildResumeStartInput({
       resumeConfig,
       sessionFile,
