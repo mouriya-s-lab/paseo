@@ -136,20 +136,6 @@ jobs:
             echo "release_tag=$RELEASE_TAG"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Fetch registry token
-        id: registry-token
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        uses: Mouriya-Emma/keycloak-token-action@v1
-        with:
-          keycloak-url: https://keycloak.237575.xyz
-          realm: registry
-          client-id: registry
-          client-secret: ${{ secrets.KEYCLOAK_REGISTRY_CLIENT_SECRET }}
-
-      - name: Log in to private registry
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        run: echo "${{ steps.registry-token.outputs.access-token }}" | docker login "$REGISTRY" -u sa-registry --password-stdin
-
       # The two role images are one release: both are built, pushed and verified
       # under the same exact tag before either `latest` moves and before the fork
       # Git tag exists. They build sequentially; each runs a full Expo export.
@@ -197,6 +183,23 @@ jobs:
         id: built
         if: steps.values.outputs.skip != 'true'
         run: echo "built=true" >> "$GITHUB_OUTPUT"
+
+      # Log in only after both builds: the Keycloak token is the Docker password
+      # and lives 30 minutes (pve-vctcn apps/registry). Fetched before two Expo
+      # builds, it expired during the second image's push (run 37431893121).
+      - name: Fetch registry token
+        id: registry-token
+        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
+        uses: Mouriya-Emma/keycloak-token-action@v1
+        with:
+          keycloak-url: https://keycloak.237575.xyz
+          realm: registry
+          client-id: registry
+          client-secret: ${{ secrets.KEYCLOAK_REGISTRY_CLIENT_SECRET }}
+
+      - name: Log in to private registry
+        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
+        run: echo "${{ steps.registry-token.outputs.access-token }}" | docker login "$REGISTRY" -u sa-registry --password-stdin
 
       # Push from the runner's Docker daemon: registry-mesh-hosts.sh writes the
       # registry mesh override into the runner instance's /etc/hosts. BuildKit's
