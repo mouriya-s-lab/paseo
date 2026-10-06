@@ -9,8 +9,9 @@ alwaysApply: true
 ## 上游同步
 
 - 上游同步只通过 `.github/workflows/sync-upstream.yml` 进入 `main`；不要手动把 `upstream` 合并到 `main`。
+- 无需人工判断的上游提交，由同步 workflow 先在 cachyos runner 上只构建两个镜像，构建通过后直接 fast-forward 推进 `main`，不开 PR；`main` 的 push 再按正常发布流程发布。只有真实冲突、上游新增 workflow 文件或候选构建失败时，才开带 `upstream-sync` label 的 PR。
 - 同步 workflow 的 `sync/merge` 和 `sync/review` 分支由 CI 管理。存在带 `upstream-sync` label 的 open PR 时，不要删除、强推或重建这些分支。
-- 同步 PR 只处理上游代码进入 fork，不打 release tag，不运行 release 命令。
+- 同步 workflow 自身不打 release tag，不运行 release 命令。
 
 ## Fork 发布
 

@@ -60,7 +60,7 @@ release and deployment notes live in [`README.md`](README.md) instead.
 `.github/workflows/sync-upstream.yml` plans each sync with
 [`upstream-sync/sync-merge.mjs`](upstream-sync/sync-merge.mjs), which reads
 those rows from the fork base. When upstream edits a `fork-deleted` path, the
-sync merge keeps it deleted. Any other conflict goes to the review PR. So does
-any `.github/workflows/` file that upstream adds and the fork base lacks: when
-you review it, either delete it and add a `fork-deleted` row, or keep it as a
-fork-owned workflow.
+sync merge keeps it deleted. Any other conflict goes to a review PR (see
+[`README.md`](README.md#upstream-sync)). So does any `.github/workflows/` file
+that upstream adds and the fork base lacks: when you review it, either delete
+it and add a `fork-deleted` row, or keep it as a fork-owned workflow.
