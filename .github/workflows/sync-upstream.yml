@@ -84,6 +84,9 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: |
           set -euo pipefail
+          # The planner writes the merge commit with git commit-tree.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream "$UPSTREAM" 2>/dev/null || true
           git fetch upstream "$UPSTREAM_BRANCH"
           git fetch origin "$BASE_BRANCH"
