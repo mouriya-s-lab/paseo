@@ -81,23 +81,6 @@ sshd sessions, so the checks run in the `iac-workspace-gate` plugin
 Verification for each rebase: over SSH, `paseo iac-gate <checkout>` prints
 `clean …` and exits 0 for a clean checkout, and exits 14 with a tracked change.
 
-## Legacy Hub execution title
-
-Hub 0.9 sends `hub.execution.agent.create.request` with the whole workflow
-prompt, and the daemon passed that prompt as the agent's explicit title. Any
-prompt over the 200-character title limit failed the create, so every real
-workflow run ended `create_failed` before an agent started. Hub 0.10 sends a
-short static title instead; until the self-hosted Hub runs 0.10, the legacy
-path titles the agent with the prompt's first line, clamped the way the daemon
-titles an untitled agent.
-
-| File                                                  | Symbol or surface                  | Why a trunk patch remains                                                         |
-| ----------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------- |
-| `packages/server/src/server/hub/daemon-executions.ts` | `DaemonExecutions.createOrResolve` | The legacy Hub create mapping has no title hook; delete once Hub sends its title. |
-
-Verification for each rebase: a Hub 0.9 workflow run whose prompt exceeds 200
-characters creates its agent.
-
 ## Removed upstream automation
 
 The fork publishes Docker only, so upstream automation for npm, Nix, relay,

@@ -12,7 +12,6 @@ import type { AgentStorage, StoredAgentRecord } from "../agent/agent-storage.js"
 import type { BoundCreateAgentCommand } from "../agent/create-agent/create.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../worktree-session.js";
 import { buildStoredAgentPayload } from "../agent/agent-projections.js";
-import { resolveCreateAgentTitles } from "../agent/create-agent-title.js";
 import { serializeAgentSnapshot, serializeAgentStreamEvent } from "../messages.js";
 import { daemonExecutionKey, type DaemonAgentOwner } from "../agent/agent-owner.js";
 
@@ -188,12 +187,7 @@ export class DaemonExecutions implements HubExecutionAgents {
       result = await this.createAgentCommand({
         kind: "mcp",
         provider: input.model ? `${input.provider}/${input.model}` : input.provider,
-        // Fork: Hub 0.9 sends the whole workflow prompt here, and as an explicit title it broke
-        // the 200-character limit, rejecting every legacy execution create. Derive the same
-        // first-line title the daemon gives an untitled agent (see fork-features/trunk-patches.md).
-        title:
-          resolveCreateAgentTitles({ initialPrompt: input.prompt }).provisionalTitle ??
-          "Hub execution",
+        title: input.prompt,
         initialPrompt: input.prompt,
         promptFailure: "throw",
         cwd: input.cwd,

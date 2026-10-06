@@ -58,4 +58,3 @@ fork-features/iac-workspace-gate/plugin/server/gate.ts	fork-owned	Lock, default-
 packages/cli/src/fork-features/iac-workspace-gate/command.ts	fork-owned	paseo iac-gate: calls the plugin and maps verdicts to the router's exit codes
 packages/cli/src/fork-features/iac-workspace-gate/command.test.ts	fork-owned	Exit-code contract with github-agent-router
 packages/cli/src/cli.ts	trunk-patch	Fixed top-level command list; register paseo iac-gate
-packages/server/src/server/hub/daemon-executions.ts	trunk-patch	Legacy Hub 0.9 create passed the whole prompt as title (over 200 chars rejected); omit it so the daemon derives one
