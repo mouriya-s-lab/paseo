@@ -16,6 +16,7 @@ fork-features/README.md	fork-owned	Fork release, sync, and split-deployment note
 fork-features/web-image/Dockerfile	fork-owned	Split-deployment web role image: self-hosted browser bundle plus nginx proxy
 fork-features/web-image/generate-config.mjs	fork-owned	Renders nginx daemon routes and /_paseo/hosts.json from the deployment inventory
 fork-features/web-image/paseo-web-entrypoint.sh	fork-owned	Web image startup: generate, nginx -t, serve
+fork-features/plugins/omp-thinking-translation/	fork-owned	Paseo plugin that shows omp reasoning translated to the omp-thinking-translator target language
 .github/workflows/fork-docker.yml	fork-owned	Docker-only build and automatic fork tag/image publication
 .github/workflows/docker.yml	fork-deleted	Upstream Docker publication; replaced by fork-docker.yml
 .agents/skills/release-beta/SKILL.md	fork-deleted	Upstream manual beta release procedure; the fork releases automatically
