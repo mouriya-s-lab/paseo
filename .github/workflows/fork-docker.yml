@@ -23,8 +23,12 @@ on:
 permissions:
   contents: read
 
+# Only one pending run per group survives, so a PR build gets its own group:
+# a queued publish or another branch's PR must not replace it.
 concurrency:
-  group: paseo-docker-fork
+  group: >-
+    ${{ github.event_name == 'pull_request' && format('paseo-docker-pr-{0}', github.ref)
+    || 'paseo-docker-fork' }}
   cancel-in-progress: false
 
 env:
