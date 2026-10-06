@@ -10,9 +10,9 @@ patch and delete the entry.
 The behavior lives in `packages/app/src/fork-features/self-hosted/`: `runtime.ts`
 (manifest, reconciliation, stored managed ids, endpoint overrides) and
 `bootstrap.ts` (manifest boot, retry loop, runtime connection projection). The
-reverse proxy that serves `/_paseo/hosts.json` and strips `/daemons/<id>` before
-forwarding to each daemon is owned by `mouriya-s-lab/homelab-apps`
-(`stacks/paseo/`), not by this repository.
+web image in `fork-features/web-image/` serves `/_paseo/hosts.json` and strips
+`/daemons/<id>` before forwarding to each daemon; the deployment only declares
+the daemon inventory (see [`README.md`](README.md#split-webdaemon-deployment)).
 
 | File                                               | Symbol or surface                               | Why a trunk patch remains                                                                                                                                                                                                                                         |
 | -------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
