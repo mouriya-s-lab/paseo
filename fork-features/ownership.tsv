@@ -45,17 +45,3 @@ packages/app/.eas/workflows/release-ios-beta.yml	fork-deleted	EAS iOS beta relea
 packages/app/.eas/workflows/release-mobile.yml	fork-deleted	EAS mobile release; the fork publishes Docker only
 packages/app/.eas/workflows/resubmit-ios-review.yml	fork-deleted	EAS iOS resubmission; the fork publishes Docker only
 scripts/ci-workflow.test.mjs	fork-deleted	Tests for the removed upstream CI workflow
-packages/server/src/fork-features/omp-exact-mcp-preapproval/policy.ts	fork-owned	OMP honours Hub exact MCP preapproval only in full (yolo) mode
-packages/server/src/fork-features/omp-exact-mcp-preapproval/policy.test.ts	fork-owned	Registry acceptance and per-mode enforcement of OMP tool policies
-packages/server/src/server/agent/provider-registry.ts	trunk-patch	Closed built-in provider contract table; declare OMP exact MCP preapproval
-packages/server/src/server/agent/providers/omp/agent.ts	trunk-patch	No mode-aware contract hook; refuse a tool policy outside full at session create/resume/mode switch
-fork-features/macos-daemon/install.sh	fork-owned	Builds a pinned fork commit and runs it as the operator's Mac daemon (launchd or session)
-fork-features/iac-workspace-gate/plugin/paseo-plugin.json	fork-owned	Daemon plugin that runs github-agent-router's IaC workspace gate where the checkout volume is readable
-fork-features/iac-workspace-gate/plugin/package.json	fork-owned	Package manifest of the IaC workspace gate plugin
-fork-features/iac-workspace-gate/plugin/index.server.ts	fork-owned	Registers the workspace.gate RPC
-fork-features/iac-workspace-gate/plugin/shared/gate.ts	fork-owned	workspace.gate RPC contract and verdicts
-fork-features/iac-workspace-gate/plugin/server/gate.ts	fork-owned	Lock, default-branch, remote-tip, tracked-change, and submodule checks
-packages/cli/src/fork-features/iac-workspace-gate/command.ts	fork-owned	paseo iac-gate: calls the plugin and maps verdicts to the router's exit codes
-packages/cli/src/fork-features/iac-workspace-gate/command.test.ts	fork-owned	Exit-code contract with github-agent-router
-packages/cli/src/cli.ts	trunk-patch	Fixed top-level command list; register paseo iac-gate
-packages/server/src/server/hub/daemon-executions.ts	trunk-patch	Legacy Hub 0.9 create passed the whole prompt as title (over 200 chars rejected); omit it so the daemon derives one

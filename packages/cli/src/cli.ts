@@ -39,7 +39,6 @@ import {
   withGlobalOptions,
 } from "./utils/command-options.js";
 import { resolveCliVersion } from "./version.js";
-import { createIacGateCommand } from "./fork-features/iac-workspace-gate/command.js";
 
 const VERSION = resolveCliVersion();
 
@@ -131,8 +130,6 @@ export function createCli(): Command {
   // Daemon commands
   program.addCommand(createDaemonCommand());
   program.addCommand(createHubCommand());
-  // Fork: github-agent-router pre-dispatch gate (mouriya-s-lab/paseo#40)
-  program.addCommand(createIacGateCommand());
 
   // Chat commands
 
