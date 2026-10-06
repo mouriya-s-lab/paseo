@@ -65,22 +65,6 @@ Verification for each rebase:
 - `npx vitest run src/fork-features/omp-exact-mcp-preapproval/policy.test.ts --bail=1` in `packages/server`
 - a Hub workflow run with an OMP agent that calls `hub.finish_execution`
 
-## IaC workspace gate
-
-github-agent-router checks the checkout an IaC agent will work in before it
-dispatches to Hub. The checkouts live on `~/Ext`, which macOS privacy denies to
-sshd sessions, so the checks run in the `iac-workspace-gate` plugin
-(`fork-features/iac-workspace-gate/plugin/`) inside the daemon, and
-`packages/cli/src/fork-features/iac-workspace-gate/command.ts` exposes them as
-`paseo iac-gate <cwd>` with the router's exit codes.
-
-| File                      | Symbol or surface | Why a trunk patch remains                                                |
-| ------------------------- | ----------------- | ------------------------------------------------------------------------ |
-| `packages/cli/src/cli.ts` | `createCli`       | The CLI's top-level commands are a fixed list with no registration seam. |
-
-Verification for each rebase: over SSH, `paseo iac-gate <checkout>` prints
-`clean …` and exits 0 for a clean checkout, and exits 14 with a tracked change.
-
 ## Removed upstream automation
 
 The fork publishes Docker only, so upstream automation for npm, Nix, relay,
