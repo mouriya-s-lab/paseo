@@ -387,6 +387,9 @@ export const fr: TranslationResources = {
         completed: "Terminée",
       },
     },
+    turnFooter: {
+      workedFor: "A travaillé pendant {{duration}}",
+    },
     compaction: {
       loading: "Compaction…",
       auto: "Contexte compacté automatiquement",
@@ -994,6 +997,47 @@ export const fr: TranslationResources = {
         actions: {
           viewPullRequest: "Voir",
           openOn: "Ouvrir sur {{brand}}",
+          addToChat: "Ajouter à la conversation",
+          addAllToChat: "Tout ajouter à la conversation",
+          addingToChat: "Ajout…",
+        },
+        checksOverview: {
+          headline: {
+            actionRequired: "Certaines vérifications demandent votre attention",
+            failure: "Certaines vérifications ont échoué",
+            pending: "Certaines vérifications ne sont pas terminées",
+            success: "Toutes les vérifications ont réussi",
+            none: "Aucune vérification",
+          },
+          count: {
+            actionRequired: "{{count}} à traiter",
+            warning: "{{count}} avec avertissement",
+            failure: "{{count}} en échec",
+            pending: "{{count}} en cours",
+            manual: "{{count}} manuelle(s)",
+            success: "{{count}} réussie(s)",
+            ignored: "{{count}} ignorée(s)",
+          },
+          detailOne: "Vérification : {{parts}}",
+          detailMany: "Vérifications : {{parts}}",
+          groupOne: {
+            actionRequired: "{{count}} vérification à traiter",
+            warning: "{{count}} vérification avec avertissement",
+            failure: "{{count}} vérification en échec",
+            pending: "{{count}} vérification en cours",
+            manual: "{{count}} vérification manuelle",
+            success: "{{count}} vérification réussie",
+            ignored: "{{count}} vérification ignorée",
+          },
+          groupMany: {
+            actionRequired: "{{count}} vérifications à traiter",
+            warning: "{{count}} vérifications avec avertissement",
+            failure: "{{count}} vérifications en échec",
+            pending: "{{count}} vérifications en cours",
+            manual: "{{count}} vérifications manuelles",
+            success: "{{count}} vérifications réussies",
+            ignored: "{{count}} vérifications ignorées",
+          },
         },
         checksSummary: {
           passedLabel: "réussies",
@@ -1007,17 +1051,21 @@ export const fr: TranslationResources = {
           checks: "Vérifications",
           pipeline: "Pipeline",
           reviews: "Revues",
+          activity: "Activité",
         },
         empty: {
           noJobs: "Aucun job",
           loadingPipeline: "Chargement du pipeline…",
           pipelineJobsLoadFailed: "Impossible de charger les jobs du pipeline",
           allowedToFail: "échec autorisé",
+          noActivity: "Aucune activité pour le moment",
         },
         approvals: "{{given}} sur {{required}} approbations",
         accessibility: {
           pullRequest: "Pull request #{{number}}",
           pullRequest_mr: "Merge request !{{number}}",
+          commentActions: "Actions du commentaire",
+          threadActions: "Actions du fil",
           checkStatus: {
             passed: "Réussie",
             failed: "Échec",
@@ -1115,6 +1163,14 @@ export const fr: TranslationResources = {
     },
   },
   sidebar: {
+    statusGroupAccessibility: "Groupe {{label}}",
+    statusBucket: {
+      needsInput: "Attend une réponse",
+      failed: "Échec",
+      readyToReview: "À relire",
+      working: "En cours",
+      done: "Terminé",
+    },
     display: {
       trigger: "Préférences d’affichage",
       heading: "Affichage",
