@@ -31,6 +31,8 @@ packages/app/src/utils/workspace-script-links.ts	trunk-patch	Managed proxy conne
 packages/app/src/fork-features/self-hosted/workspace-script-links.test.ts	fork-owned	Regression coverage for managed proxy workspace links
 packages/protocol/src/fork-features/self-hosted/daemon-endpoints.test.ts	fork-owned	Regression coverage for validated proxy endpoint paths
 packages/app/src/fork-features/self-hosted/download-store.test.ts	fork-owned	Regression coverage for active connection download URL binding
+packages/app/src/fork-features/release-version/fork-release-version.ts	fork-owned	Reads the fork release tag inlined by the Docker builds for display
+packages/app/src/screens/settings-screen.tsx	trunk-patch	About version text has no display seam; show the fork release tag instead of the upstream base version
 fork-features/upstream-sync/sync-merge.mjs	fork-owned	Upstream sync planner: keeps fork-deleted paths deleted, routes other conflicts and new upstream workflows to review
 fork-features/upstream-sync/sync-merge.test.mjs	fork-owned	Planner coverage against real git merges
 .github/workflows/sync-upstream.yml	fork-owned	Upstream sync: build-verified fast-forward of main; PRs only for review or failed builds

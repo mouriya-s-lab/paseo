@@ -24,9 +24,18 @@ RUN set -eux; \
     node -e 'const fs=require("node:fs"); const pkg=JSON.parse(fs.readFileSync("package.json","utf8")); delete pkg.scripts.prepare; fs.writeFileSync("package.json", `${JSON.stringify(pkg)}\n`);'; \
     npm ci
 
+# Release builds pass the fork tag (X.Y.Z-fork.N) for the About version; it must
+# extend PASEO_VERSION. Build-only runs leave it empty and show the base version.
+ARG PASEO_FORK_VERSION
+
 # Expo inlines EXPO_PUBLIC_* at export time; the bundle cannot switch modes later.
 RUN set -eux; \
-    EXPO_PUBLIC_PASEO_SELFHOSTED=true npm run build:web --workspace=@getpaseo/app; \
+    if [ -n "${PASEO_FORK_VERSION:-}" ]; then \
+      case "${PASEO_FORK_VERSION}" in "${PASEO_VERSION:?}-fork."*) ;; *) exit 1 ;; esac; \
+    fi; \
+    EXPO_PUBLIC_PASEO_SELFHOSTED=true \
+      EXPO_PUBLIC_PASEO_FORK_VERSION="${PASEO_FORK_VERSION:-}" \
+      npm run build:web --workspace=@getpaseo/app; \
     test -f packages/app/dist/index.html
 
 FROM ${NODE_IMAGE}

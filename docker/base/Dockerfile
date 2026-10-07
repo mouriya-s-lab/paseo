@@ -21,8 +21,15 @@ RUN set -eux; \
     node -e 'const fs=require("node:fs"); const pkg=JSON.parse(fs.readFileSync("package.json","utf8")); delete pkg.scripts.prepare; fs.writeFileSync("package.json", `${JSON.stringify(pkg)}\n`);'; \
     npm ci
 
+# Fork release tag (X.Y.Z-fork.N) shown as the bundled web UI's About version.
+ARG PASEO_FORK_VERSION
+
 RUN set -eux; \
+    if [ -n "${PASEO_FORK_VERSION:-}" ]; then \
+      case "${PASEO_FORK_VERSION}" in "${PASEO_VERSION:?}-fork."*) ;; *) exit 1 ;; esac; \
+    fi; \
     export EXPO_PUBLIC_PASEO_SELFHOSTED EXPO_PUBLIC_LOCAL_DAEMON; \
+    export EXPO_PUBLIC_PASEO_FORK_VERSION="${PASEO_FORK_VERSION:-}"; \
     mkdir -p /tmp/paseo-packs; \
     npm pack --workspace=@getpaseo/highlight --pack-destination /tmp/paseo-packs; \
     npm pack --workspace=@getpaseo/relay --pack-destination /tmp/paseo-packs; \
