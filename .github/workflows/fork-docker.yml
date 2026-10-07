@@ -113,12 +113,14 @@ jobs:
             base_version="$(node -p "require('./package.json').version")"
             build_sha="$(git rev-parse HEAD)"
             image_tag="build-${build_sha:0:12}"
+            fork_version=""
             push=false
             skip=false
             publish_latest=false
           else
             base_version="$BASE_VERSION"
             image_tag="$IMAGE_TAG"
+            fork_version="$IMAGE_TAG"
             push=true
             publish_latest="$PUBLISH_LATEST"
             skip="$ALREADY_PUBLISHED"
@@ -130,6 +132,7 @@ jobs:
           {
             echo "base_version=$base_version"
             echo "image_tag=$image_tag"
+            echo "fork_version=$fork_version"
             echo "push=$push"
             echo "skip=$skip"
             echo "publish_latest=$publish_latest"
@@ -148,6 +151,7 @@ jobs:
           platforms: linux/amd64
           build-args: |
             PASEO_VERSION=${{ steps.values.outputs.base_version }}
+            PASEO_FORK_VERSION=${{ steps.values.outputs.fork_version }}
             EXPO_PUBLIC_PASEO_SELFHOSTED=false
             EXPO_PUBLIC_LOCAL_DAEMON=self-hosted
           tags: ${{ env.IMAGE }}:${{ steps.values.outputs.image_tag }}
@@ -169,6 +173,7 @@ jobs:
           platforms: linux/amd64
           build-args: |
             PASEO_VERSION=${{ steps.values.outputs.base_version }}
+            PASEO_FORK_VERSION=${{ steps.values.outputs.fork_version }}
           tags: ${{ env.WEB_IMAGE }}:${{ steps.values.outputs.image_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

@@ -53,6 +53,12 @@ Dockerfiles assert this again through `PASEO_VERSION`. The fork tag is
 commit is retried. Image tags drop the leading `v`. A stable base also moves
 `latest`; a prerelease never does.
 
+Release builds pass the image tag as `PASEO_FORK_VERSION` to both Dockerfiles,
+which inline it as `EXPO_PUBLIC_PASEO_FORK_VERSION`; Settings → About shows it
+in place of the base version. Everything else that compares versions (daemon
+handshake, changelog, mismatch warnings) keeps the `package.json` base version.
+Build-only runs pass nothing and show the base version.
+
 Inspect the resolver without tagging or publishing:
 
 ```bash
