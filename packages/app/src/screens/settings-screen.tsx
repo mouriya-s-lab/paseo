@@ -95,6 +95,7 @@ import { resolveForkReleaseVersion } from "@/fork-features/release-version/fork-
 import { openChangelog } from "@/changelog";
 import { useAppDiagnosticStore } from "@/diagnostics/store";
 import { settingsStyles } from "@/styles/settings";
+import { WebReloadRow } from "@/fork-features/web-reload/web-reload-row";
 import { THINKING_TONE_NATIVE_PCM_BASE64 } from "@/utils/thinking-tone.native-pcm";
 import { useVoiceAudioEngineOptional } from "@/contexts/voice-context";
 import {
@@ -465,7 +466,7 @@ function AboutSection({ appVersion, appVersionText, isDesktopApp }: AboutSection
             <Text style={styles.aboutValue}>{appVersionText}</Text>
           </View>
           <WhatsNewRow />
-          {isDesktopApp ? <DesktopAppUpdateRow /> : null}
+          {isDesktopApp ? <DesktopAppUpdateRow /> : <WebReloadRow />}
         </View>
       </SettingsSection>
       <ConnectedHostsSection clientVersion={appVersion} />

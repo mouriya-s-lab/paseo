@@ -25,12 +25,11 @@ the daemon inventory (see [`README.md`](README.md#split-webdaemon-deployment)).
 
 ## Docker-only integration
 
-| File                                               | Symbol or surface                            | Why a trunk patch remains                                                                                                                                                          |
-| -------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docker/base/Dockerfile`                           | source-pack build arguments and version gate | The Dockerfile has no build-hook registration seam. The fork must pass its web-build environment and reject version drift.                                                         |
-| `packages/app/src/hooks/use-file-download.ts`      | `useFileDownload`                            | The download action has no transport-binding seam. The fork passes the active connection id so managed paths stay paired.                                                          |
-| `packages/app/src/utils/workspace-script-links.ts` | `buildDirectServiceUrl`                      | Workspace service URLs have no connection projection seam. A managed proxy path cannot expose a raw service port, and TLS must follow the connection.                              |
-| `packages/app/src/screens/settings-screen.tsx`     | `appVersionText` in `SettingsScreen`         | The About row formats `resolveAppVersion()` directly. That base version also feeds the daemon handshake and changelog, so only the display swaps in `resolveForkReleaseVersion()`. |
+| File                                               | Symbol or surface                            | Why a trunk patch remains                                                                                                                             |
+| -------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker/base/Dockerfile`                           | source-pack build arguments and version gate | The Dockerfile has no build-hook registration seam. The fork must pass its web-build environment and reject version drift.                            |
+| `packages/app/src/hooks/use-file-download.ts`      | `useFileDownload`                            | The download action has no transport-binding seam. The fork passes the active connection id so managed paths stay paired.                             |
+| `packages/app/src/utils/workspace-script-links.ts` | `buildDirectServiceUrl`                      | Workspace service URLs have no connection projection seam. A managed proxy path cannot expose a raw service port, and TLS must follow the connection. |
 
 The old build-time crypto replacement is intentionally absent because upstream
 already fixed that recursion in `2fed0f09bb96d804285902702b192a7bf09be665`.
@@ -44,6 +43,14 @@ Verification for each rebase:
 - `npm run typecheck`
 - the focused self-hosted runtime and protocol tests
 - the Docker image smoke path, including the web UI's same-origin daemon connection
+- Settings → About in the web image: the fork release tag and the reload row
+
+## Settings → About
+
+| File                                           | Symbol or surface                    | Why a trunk patch remains                                                                                                                                                          |
+| ---------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/app/src/screens/settings-screen.tsx` | `appVersionText` in `SettingsScreen` | The About row formats `resolveAppVersion()` directly. That base version also feeds the daemon handshake and changelog, so only the display swaps in `resolveForkReleaseVersion()`. |
+| `packages/app/src/screens/settings-screen.tsx` | `AboutSection`                       | The About card has no row registration seam. Outside Electron it renders `WebReloadRow` (`fork-features/web-reload/`), the only reload control an installed PWA has.               |
 
 ## Removed upstream automation
 
