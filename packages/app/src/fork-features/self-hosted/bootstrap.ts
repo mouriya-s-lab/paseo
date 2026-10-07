@@ -44,8 +44,11 @@ interface PendingManagedConnection {
 
 /**
  * Boots the host registry from the same-origin manifest: reconciles managed profiles, then
- * probes each managed daemon and keeps retrying the unreachable ones on one serialized loop.
- * Lives as long as its store; the store has no teardown.
+ * discovers each manifest daemon that has no stored profile yet and keeps retrying the
+ * unreachable ones on one serialized loop. A daemon with a stored profile already has a host
+ * runtime controller that owns its connection; probing it here would hand the controller a
+ * second client and replace the one it already connected. Lives as long as its store; the
+ * store has no teardown.
  */
 export class SelfHostedBootstrap {
   private pending = new Map<string, PendingManagedConnection>();
@@ -91,18 +94,18 @@ export class SelfHostedBootstrap {
       }
     }
 
+    const storedConnectionIds = new Set(
+      reconciled.flatMap((profile) => profile.connections.map((connection) => connection.id)),
+    );
     this.pending = new Map(
-      manifest.map((entry) => [
-        entry.id,
-        {
+      manifest.flatMap((entry): [string, PendingManagedConnection][] => {
+        const connection = buildSelfHostedConnection({
           entry,
-          connection: buildSelfHostedConnection({
-            entry,
-            endpoint: target.endpoint,
-            useTls: target.useTls,
-          }),
-        },
-      ]),
+          endpoint: target.endpoint,
+          useTls: target.useTls,
+        });
+        return storedConnectionIds.has(connection.id) ? [] : [[entry.id, { entry, connection }]];
+      }),
     );
     await this.retryPending();
 
