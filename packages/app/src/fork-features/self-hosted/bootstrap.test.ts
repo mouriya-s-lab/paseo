@@ -111,6 +111,49 @@ describe("SelfHostedBootstrap", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("leaves a daemon with a stored profile to its controller and discovers only new ones", async () => {
+    stubManifest(manifest);
+    const now = "2026-01-01T00:00:00.000Z";
+    const alphaConnection = {
+      id: "selfhosted:alpha",
+      type: "directTcp",
+      endpoint: "proxy.test:8080",
+      useTls: false,
+      basePath: "/daemons/alpha",
+    } as const;
+    const storedAlpha: HostProfile = {
+      serverId: "server-alpha",
+      label: "Alpha",
+      appearance: defaultHostAppearance(),
+      lifecycle: {},
+      connections: [alphaConnection],
+      preferredConnectionId: alphaConnection.id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const store = createFakeStore([storedAlpha]);
+
+    await new SelfHostedBootstrap(store).run();
+
+    expect(store.probeAndUpsertConnection.mock.calls).toEqual([
+      [
+        {
+          connection: {
+            id: "selfhosted:beta",
+            type: "directTcp",
+            endpoint: "proxy.test:8080",
+            useTls: false,
+            basePath: "/daemons/beta",
+          },
+          label: "Beta",
+        },
+      ],
+    ]);
+    expect(store.currentHosts()).toEqual([storedAlpha]);
+    expect(store.runProbeCycleNow).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("removes and persists a stored profile whose managed daemon left the manifest", async () => {
     stubManifest(manifest);
     const now = "2026-01-01T00:00:00.000Z";
