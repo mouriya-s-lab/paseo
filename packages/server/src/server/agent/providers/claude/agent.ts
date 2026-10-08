@@ -84,7 +84,7 @@ import {
   type ClaudeRewindSdk,
 } from "./rewind.js";
 import { normalizeProviderReplayTimestamp } from "../../provider-history-timestamps.js";
-import { claudeConfigDir, claudeProjectDirSync } from "./project-dir.js";
+import { claudeConfigDir, claudeProjectDirSync, claudeTranscriptPathSync } from "./project-dir.js";
 import { THINKING_APPLIES_NEXT_TURN_NOTICE } from "../../provider-notices.js";
 import {
   isProviderImageMarkdown,
@@ -1914,6 +1914,11 @@ function isClaudeSubagentToolName(name: string | undefined): boolean {
 
 function readClaudeParentToolUseId(message: SDKMessage): string | null {
   if (!("parent_tool_use_id" in message)) {
+    return null;
+  }
+  // Claude Code's liveness tick for a tool still running after 30 s names that tool as its
+  // parent, so a long main-thread call would otherwise read as a subagent.
+  if (message.type === "tool_progress" && message.heartbeat === true) {
     return null;
   }
   const parentToolUseId = (message as { parent_tool_use_id?: unknown }).parent_tool_use_id;
@@ -5216,26 +5221,11 @@ class ClaudeAgentSession implements AgentSession {
   private resolveHistoryPath(sessionId: string): string | null {
     const cwd = this.config.cwd;
     if (!cwd) return null;
-    const configDir = claudeConfigDir(this.harnessEnvironment);
-    const candidates = [cwd];
-    try {
-      const realCwd = fs.realpathSync(cwd);
-      if (realCwd !== cwd) {
-        candidates.push(realCwd);
-      }
-    } catch {
-      // Fall back to the configured cwd when the path has already disappeared.
-    }
-    for (const candidate of candidates) {
-      const historyPath = path.join(
-        claudeProjectDirSync(candidate, { configDir }),
-        `${sessionId}.jsonl`,
-      );
-      if (fs.existsSync(historyPath)) {
-        return historyPath;
-      }
-    }
-    return path.join(claudeProjectDirSync(cwd, { configDir }), `${sessionId}.jsonl`);
+    return claudeTranscriptPathSync({
+      cwd,
+      sessionId,
+      configDir: claudeConfigDir(this.harnessEnvironment),
+    });
   }
 
   private convertHistoryEntry(entry: ClaudeHistoryEntry): AgentTimelineItem[] {
