@@ -66,6 +66,9 @@ jobs:
       contents: write
     outputs:
       built: ${{ steps.built.outputs.built }}
+      # 'true' only when this run pushed the pair, moved `latest` and tagged
+      # the commit. The deploy job reads it; "Re-run failed jobs" keeps it.
+      published: ${{ steps.published.outputs.published }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -104,7 +107,6 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.releaseTag }}
           IMAGE_TAG: ${{ steps.release.outputs.imageTag }}
           BASE_VERSION: ${{ steps.release.outputs.baseVersion }}
-          PUBLISH_LATEST: ${{ steps.release.outputs.publishLatest }}
           ALREADY_PUBLISHED: ${{ steps.release.outputs.alreadyPublished }}
           VERIFY_REF: ${{ inputs.ref }}
         run: |
@@ -116,13 +118,11 @@ jobs:
             fork_version=""
             push=false
             skip=false
-            publish_latest=false
           else
             base_version="$BASE_VERSION"
             image_tag="$IMAGE_TAG"
             fork_version="$IMAGE_TAG"
             push=true
-            publish_latest="$PUBLISH_LATEST"
             skip="$ALREADY_PUBLISHED"
             test -n "$RELEASE_TAG"
             test -n "$base_version"
@@ -135,7 +135,7 @@ jobs:
             echo "fork_version=$fork_version"
             echo "push=$push"
             echo "skip=$skip"
-            echo "publish_latest=$publish_latest"
+            echo "revision=$(git rev-parse HEAD)"
             echo "release_tag=$RELEASE_TAG"
           } >> "$GITHUB_OUTPUT"
 
@@ -174,6 +174,7 @@ jobs:
           build-args: |
             PASEO_VERSION=${{ steps.values.outputs.base_version }}
             PASEO_FORK_VERSION=${{ steps.values.outputs.fork_version }}
+            PASEO_REVISION=${{ steps.values.outputs.revision }}
           tags: ${{ env.WEB_IMAGE }}:${{ steps.values.outputs.image_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -234,8 +235,10 @@ jobs:
             test "$(docker image inspect "$image:$IMAGE_TAG" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$GITHUB_SHA"
           done
 
+      # Every release, stable or prerelease, moves `latest`: it is the channel
+      # the homelab `paseo` Stack runs, so the deploy job below needs no pin.
       - name: Move latest tags
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true' && steps.values.outputs.publish_latest == 'true'
+        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
         env:
           IMAGE_TAG: ${{ steps.values.outputs.image_tag }}
         run: |
@@ -257,3 +260,84 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "$RELEASE_TAG" "$GITHUB_SHA"
           git push origin "refs/tags/$RELEASE_TAG"
+
+      - name: Record the publication
+        id: published
+        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
+        run: echo "published=true" >> "$GITHUB_OUTPUT"
+
+  # Roll the published `latest` web image out to the homelab Komodo Stack
+  # `paseo` (declared in mouriya-s-lab/homelab-apps). Runs after a publication,
+  # or on a manual dispatch to redeploy the current release. The Komodo
+  # endpoint and key belong to a service user that can only operate that one
+  # Stack; they live in the `homelab-paseo` environment, which only `main` may
+  # use, and are provisioned by the homelab Komodo IaC. This repository is
+  # public: print stage results only, never Komodo logs.
+  deploy:
+    needs: docker
+    if: >-
+      !inputs.ref && github.ref == 'refs/heads/main' &&
+      (needs.docker.outputs.published == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, linux, vctcn, netbird]
+    environment: homelab-paseo
+    env:
+      APP_URL: https://paseo.237575.xyz
+    steps:
+      # Same scope as the manual rollout: only the App service. The test
+      # daemons in the Stack stay as they are.
+      - name: Deploy the App service
+        env:
+          KOMODO_URL: ${{ secrets.KOMODO_URL }}
+          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
+          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+        run: |
+          set -euo pipefail
+          km_post() {
+            curl -fsS -X POST "${KOMODO_URL}$1" \
+              -H "x-api-key: ${KOMODO_API_KEY}" \
+              -H "x-api-secret: ${KOMODO_API_SECRET}" \
+              -H 'Content-Type: application/json' \
+              -d "$2"
+          }
+          response=$(km_post /execute '{"type":"DeployStack","params":{"stack":"paseo","services":["paseo"]}}')
+          update_id=$(jq -er '._id."$oid"' <<<"$response")
+          echo "Komodo update $update_id"
+          deadline=$((SECONDS + 900))
+          while true; do
+            update=$(km_post /read "$(jq -nc --arg id "$update_id" '{type:"GetUpdate",params:{id:$id}}')")
+            status=$(jq -er '.status' <<<"$update")
+            case "$status" in
+              Complete)
+                jq -r '.logs[] | "stage=\(.stage) success=\(.success)"' <<<"$update"
+                test "$(jq -r '.success' <<<"$update")" = true
+                break
+                ;;
+              Queued | InProgress)
+                if ((SECONDS > deadline)); then
+                  echo "::error::Komodo update $update_id still $status after 15 minutes"
+                  exit 1
+                fi
+                sleep 3
+                ;;
+              *)
+                echo "::error::Komodo update $update_id ended in state $status"
+                exit 1
+                ;;
+            esac
+          done
+
+      # The web image serves its build revision; the public App must report
+      # the commit this run published (or, on dispatch, the current release).
+      - name: Verify the App serves this release
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            served=$(curl -fsS "${APP_URL}/_paseo/version.json?run=${GITHUB_RUN_ID}-${attempt}" | jq -r '.revision' || true)
+            if [[ "$served" == "$GITHUB_SHA" ]]; then
+              echo "App serves revision $served"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::App serves revision '${served}', expected ${GITHUB_SHA}"
+          exit 1

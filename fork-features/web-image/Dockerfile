@@ -53,6 +53,14 @@ COPY fork-features/web-image/generate-config.mjs /usr/local/lib/paseo/generate-c
 COPY fork-features/web-image/paseo-web-entrypoint.sh /usr/local/bin/paseo-web-entrypoint
 RUN chmod +x /usr/local/bin/paseo-web-entrypoint
 
+# The commit this image was built from, served at /_paseo/version.json so a
+# deployment can confirm which release the origin runs.
+ARG PASEO_REVISION
+RUN set -eux; \
+    test -n "${PASEO_REVISION}"; \
+    mkdir -p /usr/share/nginx/html/_paseo; \
+    printf '{"revision":"%s"}\n' "${PASEO_REVISION}" > /usr/share/nginx/html/_paseo/version.json
+
 EXPOSE 6767
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \

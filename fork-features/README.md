@@ -41,7 +41,7 @@ The label is owned by `mouriya-s-lab/pve-vctcn` `apps/runner`.
 Both images build sequentially in one job. Both exact tags are pushed and their
 revision labels verified before either `latest` moves, and the Git tag is
 created last, so a failed build or push leaves no release tag and a retry
-publishes the whole pair. Deployments pin the exact tag, not `latest`.
+publishes the whole pair.
 
 ### Versions
 
@@ -50,8 +50,8 @@ highest upstream release tag reachable from the commit (`vX.Y.Z` or
 `vX.Y.Z-<identifier>`). The root `package.json` version must equal it, and both
 Dockerfiles assert this again through `PASEO_VERSION`. The fork tag is
 `v<base>-fork.N`, with `N` starting at `0` per base and reused when the same
-commit is retried. Image tags drop the leading `v`. A stable base also moves
-`latest`; a prerelease never does.
+commit is retried. Image tags drop the leading `v`. Every release, stable or
+prerelease, moves `latest` on both images.
 
 Release builds pass the image tag as `PASEO_FORK_VERSION` to both Dockerfiles,
 which inline it as `EXPO_PUBLIC_PASEO_FORK_VERSION`; Settings → About shows it
@@ -68,6 +68,32 @@ node fork-features/release/fork-release-version.mjs --ref HEAD
 Retry a failed release by re-running the `main` workflow run or dispatching it
 again. Never create or move a `v*` tag by hand: `v*` belongs to upstream, the
 fork uses `v*-fork.N`.
+
+### Deployment
+
+The homelab Komodo Stack `paseo`, declared in `mouriya-s-lab/homelab-apps`
+`stacks/paseo/compose.yaml`, runs both images as `latest`. That repository
+holds no version, so a release reaches the App without a commit there.
+
+After a run publishes, the `deploy` job of `fork-docker.yml` asks Komodo to
+deploy only the Stack's App service (`paseo`), the same scope as the manual
+`km -p homelab x deploy-stack paseo paseo`. Komodo pulls `latest` and recreates
+the container. The job then waits for the Komodo update to finish and for
+`https://paseo.237575.xyz/_paseo/version.json` to report the published commit;
+the web image writes that file at build time from `PASEO_REVISION`. The test
+daemons in the same Stack are not touched.
+
+- Redeploy the current release: dispatch the workflow on `main`. The docker
+  job finds the commit already published and skips; `deploy` still runs.
+- Retry only a failed deployment: re-run the failed jobs of that run.
+
+The job runs in the GitHub environment `homelab-paseo`, which only `main` may
+use. Its secrets `KOMODO_URL`, `KOMODO_API_KEY` and `KOMODO_API_SECRET` hold
+the mesh-only homelab Core endpoint and the key of the Komodo service user
+`ci-paseo-deploy`, whose only grant is Execute on Stack `paseo`. The homelab
+Komodo IaC (`mouriya-s-lab/homelab-komodo`) creates that user, mints the key
+and writes the secrets; rotate it there, never by hand. The repository is
+public, so the job prints Komodo stage results, not Komodo logs.
 
 ## Upstream sync
 

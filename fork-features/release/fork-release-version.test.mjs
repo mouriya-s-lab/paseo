@@ -22,7 +22,7 @@ test("selects the highest reachable upstream tag", () => {
   assert.equal(selected.baseVersion, "0.7.2");
 });
 
-test("prefers stable over lower prerelease ordering and marks latest policy", () => {
+test("releases both stable and prerelease bases under fork suffixes", () => {
   const stable = chooseForkRelease({
     currentCommit: "1".repeat(40),
     upstreamCandidates: [{ tag: "v0.7.2", commit: "a".repeat(40), reachable: true }],
@@ -33,7 +33,6 @@ test("prefers stable over lower prerelease ordering and marks latest policy", ()
     imageTag: "0.7.2-fork.0",
     baseVersion: "0.7.2",
     upstreamTag: "v0.7.2",
-    publishLatest: true,
     alreadyPublished: false,
   });
 
@@ -47,7 +46,6 @@ test("prefers stable over lower prerelease ordering and marks latest policy", ()
     imageTag: "0.7.3-beta.1-fork.0",
     baseVersion: "0.7.3-beta.1",
     upstreamTag: "v0.7.3-beta.1",
-    publishLatest: false,
     alreadyPublished: false,
   });
 });

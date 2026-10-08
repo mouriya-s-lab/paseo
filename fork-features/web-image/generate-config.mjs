@@ -300,6 +300,12 @@ ${locations ? `${locations}\n\n` : ""}    location = /daemons {
         try_files $uri =404;
     }
 
+    location = /_paseo/version.json {
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        try_files $uri =404;
+    }
+
     location = /_paseo {
         return 404;
     }
