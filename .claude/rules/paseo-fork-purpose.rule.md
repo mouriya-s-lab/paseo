@@ -23,5 +23,5 @@ alwaysApply: true
 ## 边界
 
 - 本仓库发布分离部署的两种镜像：daemon 镜像，以及 web 镜像（self-hosted 模式的浏览器 bundle，加上启动时从 daemon 清单生成 `/daemons/<id>` 反向代理和 `/_paseo/hosts.json` 的逻辑）。manifest 的格式由本仓库的 web 代码解析，所以生成它的代码也放在本仓库。
-- 部署方 `mouriya-s-lab/homelab-apps` 的 `stacks/paseo/compose.yaml` 声明 daemon 清单（id、名称、上游地址）、服务、密钥和上线方式，不再自己构建 web 镜像或持有代理生成逻辑。
+- 部署方 `mouriya-s-lab/homelab-apps` 的 `stacks/paseo/compose.yaml` 声明 daemon 清单（id、名称、上游地址）、服务和密钥，以 `latest` 运行本仓库发布的镜像；它不写版本号，不构建 web 镜像，也不持有代理生成逻辑。新版本由本仓库的发布 workflow 上线。
 - 定制代码放在哪里、上游同步与发布怎么做，见 `paseo-fork-release.rule.md`。本 rule 只说明 fork 为什么存在，以及由此产生的取舍。

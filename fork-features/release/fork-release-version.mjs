@@ -17,7 +17,7 @@ const FORK_TAG_RE = /^v(.+)-fork\.(\d+)$/;
 const USAGE =
   "Usage: node fork-features/release/fork-release-version.mjs [--ref <commit>] [--fetch] [--remote <name>] [<commit>]\n" +
   "Resolves the highest reachable upstream release tag and prints one JSON object:\n" +
-  '{"releaseTag","imageTag","baseVersion","upstreamTag","publishLatest","alreadyPublished"}';
+  '{"releaseTag","imageTag","baseVersion","upstreamTag","alreadyPublished"}';
 
 export function parseVersion(input) {
   if (typeof input !== "string") {
@@ -301,7 +301,6 @@ export function chooseForkRelease({ currentCommit, upstreamCandidates, forkTags 
     imageTag: releaseTag.slice(1),
     baseVersion: selected.baseVersion,
     upstreamTag: selected.upstreamTag,
-    publishLatest: !selected.isPrerelease,
     alreadyPublished,
   };
 }
