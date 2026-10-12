@@ -266,65 +266,36 @@ jobs:
         if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
         run: echo "published=true" >> "$GITHUB_OUTPUT"
 
-  # Roll the published `latest` web image out to the homelab Komodo Stack
-  # `paseo` (declared in mouriya-s-lab/homelab-apps). Runs after a publication,
-  # or on a manual dispatch to redeploy the current release. The Komodo
-  # endpoint and key belong to a service user that can only operate that one
-  # Stack; they live in the `homelab-paseo` environment, which only `main` may
-  # use, and are provisioned by the homelab Komodo IaC. This repository is
-  # public: print stage results only, never Komodo logs.
+  # Publish an intent only after both `latest` images are ready. homelab-apps
+  # owns the deployment hook and app-only Procedure; this source repo needs no
+  # Core credentials or mesh access (paseo#54).
   deploy:
     needs: docker
     if: >-
       !inputs.ref && github.ref == 'refs/heads/main' &&
       (needs.docker.outputs.published == 'true' || github.event_name == 'workflow_dispatch')
-    runs-on: [self-hosted, linux, vctcn, netbird]
-    environment: homelab-paseo
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
     env:
       APP_URL: https://paseo.237575.xyz
     steps:
-      # Same scope as the manual rollout: only the App service. The test
-      # daemons in the Stack stay as they are.
-      - name: Deploy the App service
+      - name: Create GitHub Deployment
         env:
-          KOMODO_URL: ${{ secrets.KOMODO_URL }}
-          KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
-          KOMODO_API_SECRET: ${{ secrets.KOMODO_API_SECRET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_API_URL: ${{ github.api_url }}
         run: |
           set -euo pipefail
-          km_post() {
-            curl -fsS -X POST "${KOMODO_URL}$1" \
-              -H "x-api-key: ${KOMODO_API_KEY}" \
-              -H "x-api-secret: ${KOMODO_API_SECRET}" \
-              -H 'Content-Type: application/json' \
-              -d "$2"
-          }
-          response=$(km_post /execute '{"type":"DeployStack","params":{"stack":"paseo","services":["paseo"]}}')
-          update_id=$(jq -er '._id."$oid"' <<<"$response")
-          echo "Komodo update $update_id"
-          deadline=$((SECONDS + 900))
-          while true; do
-            update=$(km_post /read "$(jq -nc --arg id "$update_id" '{type:"GetUpdate",params:{id:$id}}')")
-            status=$(jq -er '.status' <<<"$update")
-            case "$status" in
-              Complete)
-                jq -r '.logs[] | "stage=\(.stage) success=\(.success)"' <<<"$update"
-                test "$(jq -r '.success' <<<"$update")" = true
-                break
-                ;;
-              Queued | InProgress)
-                if ((SECONDS > deadline)); then
-                  echo "::error::Komodo update $update_id still $status after 15 minutes"
-                  exit 1
-                fi
-                sleep 3
-                ;;
-              *)
-                echo "::error::Komodo update $update_id ended in state $status"
-                exit 1
-                ;;
-            esac
-          done
+          payload=$(jq -nc --arg ref "$GITHUB_SHA" \
+            '{ref:$ref,environment:"paseo",auto_merge:false,required_contexts:[]}')
+          response=$(curl --silent --show-error --fail-with-body \
+            -X POST "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'Content-Type: application/json' \
+            -d "$payload")
+          deployment_id=$(jq -er '.id' <<<"$response")
+          echo "GitHub Deployment $deployment_id for $GITHUB_SHA"
 
       # The web image serves its build revision; the public App must report
       # the commit this run published (or, on dispatch, the current release).

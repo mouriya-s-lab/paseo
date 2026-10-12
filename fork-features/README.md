@@ -75,25 +75,27 @@ The homelab Komodo Stack `paseo`, declared in `mouriya-s-lab/homelab-apps`
 `stacks/paseo/compose.yaml`, runs both images as `latest`. That repository
 holds no version, so a release reaches the App without a commit there.
 
-After a run publishes, the `deploy` job of `fork-docker.yml` asks Komodo to
-deploy only the Stack's App service (`paseo`), the same scope as the manual
-`km -p homelab x deploy-stack paseo paseo`. Komodo pulls `latest` and recreates
-the container. The job then waits for the Komodo update to finish and for
-`https://paseo.237575.xyz/_paseo/version.json` to report the published commit;
-the web image writes that file at build time from `PASEO_REVISION`. The test
-daemons in the same Stack are not touched.
+After a run publishes, the `deploy` job of `fork-docker.yml` creates a GitHub
+Deployment for environment `paseo`, with the run's commit SHA, `auto_merge=false`
+and no required contexts. It uses only the job's `GITHUB_TOKEN` with
+`deployments: write` and runs on a GitHub-hosted runner without mesh access.
+The `deployment` webhook and `deploy-paseo` Procedure belong to
+`mouriya-s-lab/homelab-apps`; the Procedure deploys only the App service
+(`paseo`), leaving the test daemons in that Stack untouched. Komodo pulls
+`latest` and recreates the App only when its image or effective config changed.
+
+The job then waits for `https://paseo.237575.xyz/_paseo/version.json` to report
+the run's commit. The web image writes that file at build time from
+`PASEO_REVISION`. A Deployment records the request; the public revision check
+confirms its result.
 
 - Redeploy the current release: dispatch the workflow on `main`. The docker
   job finds the commit already published and skips; `deploy` still runs.
 - Retry only a failed deployment: re-run the failed jobs of that run.
 
-The job runs in the GitHub environment `homelab-paseo`, which only `main` may
-use. Its secrets `KOMODO_URL`, `KOMODO_API_KEY` and `KOMODO_API_SECRET` hold
-the mesh-only homelab Core endpoint and the key of the Komodo service user
-`ci-paseo-deploy`, whose only grant is Execute on Stack `paseo`. The homelab
-Komodo IaC (`mouriya-s-lab/homelab-komodo`) creates that user, mints the key
-and writes the secrets; rotate it there, never by hand. The repository is
-public, so the job prints Komodo stage results, not Komodo logs.
+This source repository holds no Komodo credentials. The workload repository
+owns the hook's secret and rollout scope. Pull requests, sync build-only calls,
+failed builds and scheduled runs with no publication do not create Deployments.
 
 ## Upstream sync
 
