@@ -21,7 +21,7 @@ alwaysApply: true
 - upstream 基础版本使用 `vX.Y.Z-fork.N`，`N` 从 `0` 开始；同一 commit 重试复用已有 fork tag，其他 fork commit 使用该基础版本的最大后缀加一。
 - 每次发布（稳定版与 prerelease 一样）在两个精确 tag 都推送并核对 revision 后，把两个镜像的 `latest` 移到该 tag。`latest` 是部署通道：homelab 的 `paseo` Stack 只跑 `latest`，部署方仓库不写版本号。
 - 两个镜像都构建、推送成功后才创建并推送 fork tag；失败时不留下未构建的 release tag。
-- 发布成功后，同一 workflow 的 `deploy` job 让 homelab Komodo 只重新部署 Stack `paseo` 的 App 服务，并确认公开 origin 的 `/_paseo/version.json` 报告本次发布的 commit。手动 dispatch 重新部署当前发布。部署凭据只能操作这一个 Stack，存放在仅 `main` 可用的 `homelab-paseo` environment 中，由 homelab Komodo 的 IaC 创建和轮换，禁止手写或粘贴。
+- 发布成功后，同一 workflow 的 `deploy` job 用自己的 `GITHUB_TOKEN` 创建目标 Stack `paseo` 的 GitHub Deployment，并确认公开 origin 的 `/_paseo/version.json` 报告本次发布的 commit。手动 dispatch 重新部署当前发布；无新发布的定时 run、PR 和 sync 构建调用不创建 Deployment。部署 hook、Procedure 与只部署 App 服务的范围由 `homelab-apps` 维护；本源码仓库不持有 Komodo 凭据，细节见 `fork-features/README.md`。
 - registry 登录用短时 Keycloak token 经 `sa-registry` 登录；`KEYCLOAK_REGISTRY_CLIENT_SECRET` 由 IaC 同步到仓库 secret，禁止手写、粘贴或提交。
 - 不运行上游的 npm、Desktop、Android、EAS、Nix、网站或 relay release 命令；Docker 之外的 Actions 已移除。
 
