@@ -9,14 +9,17 @@ import {
 } from "./fork-release-version.mjs";
 
 test("selects the highest reachable upstream tag", () => {
-  const selected = chooseUpstreamRelease([
-    { tag: "v0.7.0", commit: "a".repeat(40), reachable: true },
-    { tag: "v0.7.2", commit: "b".repeat(40), reachable: true },
-    { tag: "v0.7.1", commit: "c".repeat(40), reachable: false },
-    { tag: "not-a-release", commit: "d".repeat(40), reachable: true },
-    { tag: "v0.7.3-fork.0", commit: "e".repeat(40), reachable: true },
-    { tag: "v01.7.2", commit: "f".repeat(40), reachable: true },
-  ]);
+  const selected = chooseUpstreamRelease(
+    [
+      { tag: "v0.7.0", commit: "a".repeat(40), reachable: true },
+      { tag: "v0.7.2", commit: "b".repeat(40), reachable: true },
+      { tag: "v0.7.1", commit: "c".repeat(40), reachable: false },
+      { tag: "not-a-release", commit: "d".repeat(40), reachable: true },
+      { tag: "v0.7.3-fork.0", commit: "e".repeat(40), reachable: true },
+      { tag: "v01.7.2", commit: "f".repeat(40), reachable: true },
+    ],
+    "0.7.2",
+  );
 
   assert.equal(selected.upstreamTag, "v0.7.2");
   assert.equal(selected.baseVersion, "0.7.2");
@@ -25,6 +28,7 @@ test("selects the highest reachable upstream tag", () => {
 test("releases both stable and prerelease bases under fork suffixes", () => {
   const stable = chooseForkRelease({
     currentCommit: "1".repeat(40),
+    packageVersion: "0.7.2",
     upstreamCandidates: [{ tag: "v0.7.2", commit: "a".repeat(40), reachable: true }],
     forkTags: [],
   });
@@ -38,6 +42,7 @@ test("releases both stable and prerelease bases under fork suffixes", () => {
 
   const prerelease = chooseForkRelease({
     currentCommit: "1".repeat(40),
+    packageVersion: "0.7.3-beta.1",
     upstreamCandidates: [{ tag: "v0.7.3-beta.1", commit: "a".repeat(40), reachable: true }],
     forkTags: [],
   });
@@ -78,6 +83,7 @@ test("reuses the highest fork tag at the current commit", () => {
   const current = "c".repeat(40);
   const result = chooseForkRelease({
     currentCommit: current,
+    packageVersion: "0.7.2",
     upstreamCandidates: [{ tag: "v0.7.2", commit: "a".repeat(40), reachable: true }],
     forkTags: [
       { tag: "v0.7.2-fork.0", commit: "b".repeat(40) },
@@ -96,6 +102,7 @@ test("fails when no reachable release exists", () => {
     () =>
       chooseForkRelease({
         currentCommit: "c".repeat(40),
+        packageVersion: "0.7.2",
         upstreamCandidates: [
           { tag: "v0.7.2", commit: "a".repeat(40), reachable: false },
           { tag: "v0.7.2-fork.0", commit: "b".repeat(40), reachable: true },
@@ -104,6 +111,53 @@ test("fails when no reachable release exists", () => {
       }),
     /No reachable upstream release tag found/,
   );
+});
+
+test("uses a higher package version backed by a separate upstream release tag", () => {
+  const result = chooseForkRelease({
+    currentCommit: "c".repeat(40),
+    packageVersion: "0.11.2",
+    upstreamCandidates: [
+      { tag: "v0.11.1", commit: "a".repeat(40), reachable: true },
+      { tag: "v0.11.2", commit: "b".repeat(40), reachable: false },
+      { tag: "v0.12.0", commit: "d".repeat(40), reachable: false },
+    ],
+    forkTags: [{ tag: "v0.11.2-fork.0", commit: "e".repeat(40) }],
+  });
+  assert.deepEqual(result, {
+    releaseTag: "v0.11.2-fork.1",
+    imageTag: "0.11.2-fork.1",
+    baseVersion: "0.11.2",
+    upstreamTag: "v0.11.2",
+    alreadyPublished: false,
+  });
+});
+
+test("fails when the higher package version has no exact upstream tag", () => {
+  assert.throws(
+    () =>
+      chooseUpstreamRelease(
+        [
+          { tag: "v0.11.1", commit: "a".repeat(40), reachable: true },
+          { tag: "v0.11.2-fork.0", commit: "b".repeat(40), reachable: false },
+          { tag: "v0.11.2-beta.1", commit: "c".repeat(40), reachable: false },
+          { tag: "v00.11.2", commit: "d".repeat(40), reachable: false },
+        ],
+        "0.11.2",
+      ),
+    /Missing upstream release tag v0\.11\.2 for package\.json version/,
+  );
+});
+
+test("keeps reachable selection when the package version is lower", () => {
+  const selected = chooseUpstreamRelease(
+    [
+      { tag: "v0.11.1", commit: "a".repeat(40), reachable: false },
+      { tag: "v0.11.2", commit: "b".repeat(40), reachable: true },
+    ],
+    "0.11.1",
+  );
+  assert.equal(selected.baseVersion, "0.11.2");
 });
 
 test("ignores invalid fork tags and non-canonical versions", () => {

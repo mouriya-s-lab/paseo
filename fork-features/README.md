@@ -47,8 +47,12 @@ publishes the whole pair.
 
 [`release/fork-release-version.mjs`](release/fork-release-version.mjs) picks the
 highest upstream release tag reachable from the commit (`vX.Y.Z` or
-`vX.Y.Z-<identifier>`). The root `package.json` version must equal it, and both
-Dockerfiles assert this again through `PASEO_VERSION`. The fork tag is
+`vX.Y.Z-<identifier>`). If that commit's root `package.json` declares a higher
+version, its exact upstream `v<version>` tag must exist; the resolver then uses
+that version even if the tag is on a separate release branch. A missing tag
+fails the release. This handles upstream squash releases without merging their
+release branches into the fork. The root version must match the resolved base,
+and both Dockerfiles assert this again through `PASEO_VERSION`. The fork tag is
 `v<base>-fork.N`, with `N` starting at `0` per base and reused when the same
 commit is retried. Image tags drop the leading `v`. Every release, stable or
 prerelease, moves `latest` on both images.

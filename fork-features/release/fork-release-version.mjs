@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Fork-owned release resolver: selects the highest reachable upstream release
-// tag and allocates a deterministic fork tag (v<base>-fork.N) for it.
+// Fork-owned release resolver: selects a tag-backed upstream base version
+// and allocates a deterministic fork tag (v<base>-fork.N) for it.
 // Only git CLI output is treated as untrusted input; everything else is pure.
 
 import { execFileSync, spawnSync } from "node:child_process";
@@ -16,7 +16,7 @@ const FORK_TAG_RE = /^v(.+)-fork\.(\d+)$/;
 
 const USAGE =
   "Usage: node fork-features/release/fork-release-version.mjs [--ref <commit>] [--fetch] [--remote <name>] [<commit>]\n" +
-  "Resolves the highest reachable upstream release tag and prints one JSON object:\n" +
+  "Resolves the upstream release base for the ref's package version and prints one JSON object:\n" +
   '{"releaseTag","imageTag","baseVersion","upstreamTag","alreadyPublished"}';
 
 export function parseVersion(input) {
@@ -195,10 +195,12 @@ export function compareVersions(a, b) {
   return comparePrereleaseIdentifiers(a.prereleaseIdentifiers, b.prereleaseIdentifiers);
 }
 
-export function chooseUpstreamRelease(candidates) {
+export function chooseUpstreamRelease(candidates, packageVersion) {
   if (!Array.isArray(candidates)) {
     throw new Error("upstreamCandidates must be an array.");
   }
+  const packageRelease = parseVersion(packageVersion);
+  let matchingPackageRelease = null;
   const reachable = [];
   for (const entry of candidates) {
     if (
@@ -211,14 +213,17 @@ export function chooseUpstreamRelease(candidates) {
         "Each upstream candidate must have { tag: string, commit: string, reachable: boolean }.",
       );
     }
-    if (entry.reachable !== true) {
-      continue;
-    }
     const parsed = parseUpstreamTag(entry.tag);
     if (!parsed) {
       continue;
     }
-    reachable.push({ ...parsed, commit: entry.commit.trim() });
+    const release = { ...parsed, commit: entry.commit.trim() };
+    if (parsed.upstreamTag === `v${packageRelease.version}`) {
+      matchingPackageRelease = release;
+    }
+    if (entry.reachable === true) {
+      reachable.push(release);
+    }
   }
   if (reachable.length === 0) {
     throw new Error("No reachable upstream release tag found.");
@@ -233,7 +238,19 @@ export function chooseUpstreamRelease(candidates) {
     }
     return x.upstreamTag < y.upstreamTag ? -1 : 1;
   });
-  return reachable[0];
+  const highestReachable = reachable[0];
+  // Upstream may squash a release into main but tag its separate release
+  // branch. Only its declared, tag-backed package version may advance the base
+  // without ancestry; do not merge that branch's code (paseo#56).
+  if (compareVersions(packageRelease, highestReachable) > 0) {
+    if (!matchingPackageRelease) {
+      throw new Error(
+        `Missing upstream release tag v${packageRelease.version} for package.json version.`,
+      );
+    }
+    return matchingPackageRelease;
+  }
+  return highestReachable;
 }
 
 export function allocateForkRelease({ baseVersion, currentCommit, forkTags }) {
@@ -274,14 +291,14 @@ export function allocateForkRelease({ baseVersion, currentCommit, forkTags }) {
   return { suffix: maxSuffix + 1, alreadyPublished: false };
 }
 
-export function chooseForkRelease({ currentCommit, upstreamCandidates, forkTags }) {
+export function chooseForkRelease({ currentCommit, packageVersion, upstreamCandidates, forkTags }) {
   if (typeof currentCommit !== "string" || currentCommit.trim().length === 0) {
     throw new Error("currentCommit must be a non-empty commit SHA.");
   }
   const current = currentCommit.trim();
   let selected = null;
   try {
-    selected = chooseUpstreamRelease(upstreamCandidates ?? []);
+    selected = chooseUpstreamRelease(upstreamCandidates ?? [], packageVersion);
   } catch (error) {
     if (error instanceof Error && error.message.includes("No reachable upstream")) {
       throw new Error(`No reachable upstream release tag found from ${current}.`, {
@@ -450,6 +467,9 @@ function main() {
   }
   const ref = args.ref ?? "HEAD";
   const currentCommit = resolveRefCommit(ref);
+  const packageVersion = JSON.parse(
+    runGitOutput(["show", `${currentCommit}:package.json`]),
+  ).version;
   const allTags = listTags();
   const upstreamTags = [];
   for (const tag of allTags) {
@@ -467,7 +487,7 @@ function main() {
       reachable: isAncestor(commit, currentCommit),
     });
   }
-  const selected = chooseUpstreamRelease(upstreamCandidates);
+  const selected = chooseUpstreamRelease(upstreamCandidates, packageVersion);
   const forkEntries = [];
   for (const tag of allTags) {
     const parsed = parseForkTag(tag);
@@ -478,6 +498,7 @@ function main() {
   }
   const result = chooseForkRelease({
     currentCommit,
+    packageVersion,
     upstreamCandidates,
     forkTags: forkEntries,
   });
