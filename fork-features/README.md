@@ -83,10 +83,12 @@ After a run publishes, the `deploy` job of `fork-docker.yml` creates a GitHub
 Deployment for environment `paseo`, with the run's commit SHA, `auto_merge=false`
 and no required contexts. It uses only the job's `GITHUB_TOKEN` with
 `deployments: write` and runs on a GitHub-hosted runner without mesh access.
-The `deployment` webhook and `deploy-paseo` Procedure belong to
-`mouriya-s-lab/homelab-apps`; the Procedure deploys only the App service
-(`paseo`), leaving the test daemons in that Stack untouched. Komodo pulls
-`latest` and recreates the App only when its image or effective config changed.
+Each Deployment asks the `deploy-paseo` Procedure in `mouriya-s-lab/homelab-apps`
+to execute `DeployStack` for service `paseo`. That Stack uses `--force-recreate`
+because single-file bind mounts need recreation to rebind (see the
+[homelab-apps README](https://github.com/mouriya-s-lab/homelab-apps/blob/main/README.md)).
+The App container is recreated even when its image is unchanged; the other
+services in the Stack are not touched.
 
 The job then waits for `https://paseo.237575.xyz/_paseo/version.json` to report
 the run's commit. The web image writes that file at build time from
@@ -95,7 +97,8 @@ confirms its result.
 
 - Redeploy the current release: dispatch the workflow on `main`. The docker
   job finds the commit already published and skips; `deploy` still runs.
-- Retry only a failed deployment: re-run the failed jobs of that run.
+- Retry a failed Deployment: redeliver its original GitHub webhook delivery.
+  Re-running the `deploy` job creates another Deployment.
 
 This source repository holds no Komodo credentials. The workload repository
 owns the hook's secret and rollout scope. Pull requests, sync build-only calls,
@@ -148,6 +151,6 @@ The deployment owns the inventory. `mouriya-s-lab/homelab-apps`
 `stacks/paseo/compose.yaml` declares it inline as a Compose `configs` entry
 mounted at `/etc/paseo/daemons.json`. Changing the inventory needs a new
 container, not a new image: Compose does not detect a changed `configs.content`,
-so recreate explicitly (`docker compose up -d --force-recreate web`; the Komodo
+so recreate explicitly (`docker compose up -d --force-recreate paseo`; the Komodo
 Stack passes `--force-recreate`). Browsers pick up the change on their next
 load.
