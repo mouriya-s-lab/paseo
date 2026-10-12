@@ -17,7 +17,7 @@ alwaysApply: true
 
 - 这个 fork 只发布 Docker 镜像：daemon 镜像 `registry.237575.xyz/paseo/paseo` 和 web 镜像 `registry.237575.xyz/paseo/paseo-web`，两者同一 commit、同一 tag 成对发布。不发布 npm、Desktop、Android、iOS/EAS、Nix、网站或 relay 构建产物。
 - `.github/workflows/fork-docker.yml` 在自有 GARM runner 上执行唯一的构建发布路径：同仓库 PR 只构建不推送；`main` push、每小时 upstream tag 检查和 `main` 上的手动 dispatch 执行发布。上游的 `docker.yml` 与 release skill 已删除。
-- workflow 从当前 `main` 可达的最高 upstream `vX.Y.Z` 或 prerelease tag 解析基础版本；root `package.json` 必须与该基础版本一致。
+- workflow 从发布提交可达的最高 upstream `vX.Y.Z` 或 prerelease tag 解析基础版本；该提交的 root `package.json` 版本更高时，仅在对应 upstream `v<version>` tag 存在时采用该版本（不要求 tag 可达），缺 tag 仍失败。不为获得 tag 祖先关系合并上游 release 分支；root 版本必须与解析后的基础版本一致（paseo#56）。
 - upstream 基础版本使用 `vX.Y.Z-fork.N`，`N` 从 `0` 开始；同一 commit 重试复用已有 fork tag，其他 fork commit 使用该基础版本的最大后缀加一。
 - 每次发布（稳定版与 prerelease 一样）在两个精确 tag 都推送并核对 revision 后，把两个镜像的 `latest` 移到该 tag。`latest` 是部署通道：homelab 的 `paseo` Stack 只跑 `latest`，部署方仓库不写版本号。
 - 两个镜像都构建、推送成功后才创建并推送 fork tag；失败时不留下未构建的 release tag。
