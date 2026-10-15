@@ -67,6 +67,7 @@ interface ThinkingBodyProps {
   diagnostic: string | null;
   showOriginal: boolean;
   onToggleOriginal: () => void;
+  onRetry: () => void;
   textStyles: ThinkingTextStyles;
 }
 
@@ -76,6 +77,7 @@ function ThinkingBody({
   diagnostic,
   showOriginal,
   onToggleOriginal,
+  onRetry,
   textStyles,
 }: ThinkingBodyProps) {
   const toggleLabel = showOriginal ? "查看中文翻译" : "查看原文";
@@ -93,7 +95,14 @@ function ThinkingBody({
           <Text style={textStyles.toggle}>{toggleLabel}</Text>
         </Pressable>
       )}
-      {diagnostic !== null && <Text style={textStyles.diagnostic}>{diagnostic}</Text>}
+      {diagnostic !== null && (
+        <View>
+          <Text style={textStyles.diagnostic}>{diagnostic}</Text>
+          <Pressable accessibilityRole="button" onPress={onRetry} style={styles.button}>
+            <Text style={textStyles.toggle}>重试翻译</Text>
+          </Pressable>
+        </View>
+      )}
       <Text selectable style={textStyles.body}>
         {text}
       </Text>
@@ -138,13 +147,23 @@ export function ThinkingTranslation({
     staleTime: Infinity,
     gcTime: Infinity,
     retry: false,
+    refetchInterval: (query) => {
+      const pending = query.state.status === "success" && query.state.data?.status === "pending";
+      return pending ? 1000 : false;
+    },
   });
+  const { refetch: refetchTranslation } = translation;
+  const retryTranslation = useCallback(() => {
+    void refetchTranslation();
+  }, [refetchTranslation]);
   let translated: string | null = null;
   let diagnostic: string | null = null;
   if (isOmp) {
     if (translation.data?.status === "ready") translated = translation.data.translation;
-    if (translation.data?.status === "error") diagnostic = translation.data.message;
-    else if (translation.isError) diagnostic = "翻译请求失败；保留原文。";
+    if (!translation.isFetching) {
+      if (translation.data?.status === "error") diagnostic = translation.data.message;
+      else if (translation.isError) diagnostic = "翻译请求失败；保留原文。";
+    }
   }
   const label = thinkingLabel({
     isOmp,
@@ -177,6 +196,7 @@ export function ThinkingTranslation({
           diagnostic={diagnostic}
           showOriginal={showOriginal}
           onToggleOriginal={toggleOriginal}
+          onRetry={retryTranslation}
           textStyles={textStyles}
         />
       )}
