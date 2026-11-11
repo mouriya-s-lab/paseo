@@ -31,7 +31,7 @@ Release artifacts, and upstream's release workflows and skills are deleted.
 the only release workflow. It runs on the GARM edge runner on the CachyOS laptop
 (`runs-on` includes `cachyos`, which only the edge pool carries): the resident
 VM 181 runners share 4 GiB and `expo export --platform web` is OOM-killed there.
-The label is owned by `mouriya-s-lab/pve-vctcn` `apps/runner`.
+The label is owned by `mouriya-devops/pve-vctcn` `apps/runner`.
 
 - A same-repository pull request builds both images without pushing.
 - A push to `main`, the hourly schedule, and a manual dispatch on `main` publish

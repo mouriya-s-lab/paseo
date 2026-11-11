@@ -213,7 +213,7 @@ jobs:
       # resident runner on OVH cannot hairpin to it.
       # GARM self-hosted runners use resident LXD on VM 181 or edge Incus on the
       # operator's laptop; mesh reachability comes from that host's NetBird peer.
-      # See https://github.com/mouriya-s-lab/pve-vctcn/blob/main/apps/runner/README.md#边缘-incus-providergarm-edge-incus
+      # See https://github.com/mouriya-devops/pve-vctcn/blob/main/apps/runner/README.md#边缘-incus-providergarm-edge-incus
       - name: Push exact tags to private registry
         if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
         env:
