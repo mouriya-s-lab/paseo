@@ -196,7 +196,7 @@ jobs:
       - name: Fetch registry token
         id: registry-token
         if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        uses: Mouriya-Emma/keycloak-token-action@v1
+        uses: mouriya-devops/keycloak-token-action@v1
         with:
           keycloak-url: https://keycloak.237575.xyz
           realm: registry
