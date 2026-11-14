@@ -17,7 +17,8 @@ fork-features/web-image/Dockerfile	fork-owned	Split-deployment web role image: s
 fork-features/web-image/generate-config.mjs	fork-owned	Renders nginx daemon routes and /_paseo/hosts.json from the deployment inventory
 fork-features/web-image/paseo-web-entrypoint.sh	fork-owned	Web image startup: generate, nginx -t, serve
 fork-features/plugins/omp-thinking-translation/	fork-owned	Paseo plugin that shows omp reasoning translated to the omp-thinking-translator target language
-.github/workflows/fork-docker.yml	fork-owned	Docker-only build and automatic fork tag/image publication
+.github/workflows/fork-docker.yml	fork-owned	Fork release decision and fork tag; both images build and publish through the mouriya-devops/ci image workflow
+mise.toml	fork-owned	`build` task for both role images; upstream keeps its toolchain in .tool-versions and .mise.toml
 .github/workflows/docker.yml	fork-deleted	Upstream Docker publication; replaced by fork-docker.yml
 fork-features/upstream-sync/open-sync-pr.sh	fork-owned	Opens or reuses the labeled sync PR for a fixed sync branch
 .agents/skills/release-beta/SKILL.md	fork-deleted	Upstream manual beta release procedure; the fork releases automatically
