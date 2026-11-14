@@ -55,7 +55,7 @@ jobs:
   # (`inputs.ref`) build `build-<sha12>` without publishing; `main` publishes
   # the next fork release unless the commit already has one.
   release:
-    # Public fork PRs must not execute untrusted code on the mesh runner.
+    # Only same-repository pull requests are built.
     if: >-
       (github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository) &&
@@ -135,22 +135,18 @@ jobs:
     permissions:
       contents: read
       deployments: write
+      packages: write
     uses: mouriya-devops/ci/.github/workflows/image.yml@main
     with:
-      # `cachyos` exists only on the edge Incus pool (CachyOS laptop, 30 GiB).
-      # The resident VM 181 LXD runners share 4 GiB, which OOM-kills
-      # `expo export` (paseo#20, pve-vctcn#300).
-      runs-on: '["self-hosted","linux","vctcn","netbird","x64","cachyos"]'
+      runs-on: '["ubuntu-latest"]'
       ref: ${{ needs.release.outputs.ref }}
       mode: ${{ needs.release.outputs.mode }}
       images: |
-        registry.237575.xyz/paseo/paseo
-        registry.237575.xyz/paseo/paseo-web
+        ghcr.io/mouriya-s-lab/paseo
+        ghcr.io/mouriya-s-lab/paseo-web
       tag: ${{ needs.release.outputs.tag }}
       channel: ${{ needs.release.outputs.mode == 'publish' && 'latest' || '' }}
       deployment-environment: ${{ needs.release.outputs.mode == 'publish' && 'paseo' || '' }}
-    secrets:
-      KEYCLOAK_REGISTRY_CLIENT_SECRET: ${{ secrets.KEYCLOAK_REGISTRY_CLIENT_SECRET }}
 
   # The fork tag marks the commit as published, so it is created only after
   # the images and the Deployment exist; a failed publication leaves no tag

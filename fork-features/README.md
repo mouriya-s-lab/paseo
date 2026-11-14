@@ -18,9 +18,9 @@ upstream file.
 The fork publishes two Docker images, one per role of the split deployment,
 always as a pair under the same tag:
 
-- `registry.237575.xyz/paseo/paseo` — the daemon, from
+- `ghcr.io/mouriya-s-lab/paseo` — the daemon, from
   [`docker/base/Dockerfile`](../docker/base/Dockerfile).
-- `registry.237575.xyz/paseo/paseo-web` — the web origin, from
+- `ghcr.io/mouriya-s-lab/paseo-web` — the web origin, from
   [`web-image/Dockerfile`](web-image/Dockerfile). See
   [Split web/daemon deployment](#split-webdaemon-deployment).
 
@@ -32,15 +32,12 @@ the only release workflow. It decides what a run builds and hands the build and
 publication to the shared `image` workflow of
 [`mouriya-devops/ci`](https://github.com/mouriya-devops/ci), which runs the
 `build` task of the root [`mise.toml`](../mise.toml) (`mise run build` builds
-both images locally) on the GARM edge runner on the CachyOS laptop (`runs-on`
-includes `cachyos`, which only the edge pool carries): the resident VM 181
-runners share 4 GiB and `expo export --platform web` is OOM-killed there. The
-label is owned by `mouriya-devops/pve-vctcn` `apps/runner`.
+both images locally) on a GitHub-hosted runner.
 
 - A same-repository pull request builds both images without pushing.
 - A push to `main`, the hourly schedule, and a manual dispatch on `main` publish
   the current fork release.
-- Pull requests from other repositories never run on the mesh runner.
+- Pull requests from other repositories are not built.
 
 Both images build sequentially in one job, labelled with the commit they were
 built from. Both exact tags are pushed and their revision labels verified before
