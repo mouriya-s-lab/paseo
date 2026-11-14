@@ -12,6 +12,7 @@ on:
       - "patches/**"
       - "scripts/**"
       - "fork-features/**"
+      - "mise.toml"
       - "tsconfig*.json"
       - "packages/**"
   push:
@@ -30,7 +31,7 @@ on:
     outputs:
       built:
         description: "'true' only when both images built from inputs.ref"
-        value: ${{ jobs.docker.outputs.built }}
+        value: ${{ jobs.image.outputs.built }}
 
 permissions:
   contents: read
@@ -46,38 +47,32 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  REGISTRY: registry.237575.xyz
-  IMAGE: registry.237575.xyz/paseo/paseo
-  WEB_IMAGE: registry.237575.xyz/paseo/paseo-web
   UPSTREAM_REPOSITORY: https://github.com/getpaseo/paseo.git
+  APP_URL: https://paseo.237575.xyz
 
 jobs:
-  docker:
+  # Decides what this run builds: same-repository PRs and sync candidates
+  # (`inputs.ref`) build `build-<sha12>` without publishing; `main` publishes
+  # the next fork release unless the commit already has one.
+  release:
     # Public fork PRs must not execute untrusted code on the mesh runner.
     if: >-
       (github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository) &&
       (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || inputs.ref)
-    # `cachyos` exists only on the edge Incus pool (CachyOS laptop, 30 GiB). The
-    # resident VM 181 LXD runners share 4 GiB, which OOM-kills `expo export`
-    # (paseo#20, pve-vctcn#300).
-    runs-on: [self-hosted, linux, vctcn, netbird, x64, cachyos]
-    permissions:
-      contents: write
+    runs-on: ubuntu-latest
     outputs:
-      built: ${{ steps.built.outputs.built }}
-      # 'true' only when this run pushed the pair, moved `latest` and tagged
-      # the commit. The deploy job reads it; "Re-run failed jobs" keeps it.
-      published: ${{ steps.published.outputs.published }}
+      mode: ${{ steps.values.outputs.mode }}
+      ref: ${{ steps.values.outputs.ref }}
+      tag: ${{ steps.values.outputs.tag }}
+      release_tag: ${{ steps.values.outputs.release_tag }}
+      skip: ${{ steps.values.outputs.skip }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ inputs.ref }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
 
       - name: Resolve upstream and fork release
         id: release
@@ -111,204 +106,102 @@ jobs:
           VERIFY_REF: ${{ inputs.ref }}
         run: |
           set -euo pipefail
+          revision="$(git rev-parse HEAD)"
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" || -n "$VERIFY_REF" ]]; then
-            base_version="$(node -p "require('./package.json').version")"
-            build_sha="$(git rev-parse HEAD)"
-            image_tag="build-${build_sha:0:12}"
-            fork_version=""
-            push=false
+            mode=build-only
+            tag="build-${revision:0:12}"
             skip=false
           else
-            base_version="$BASE_VERSION"
-            image_tag="$IMAGE_TAG"
-            fork_version="$IMAGE_TAG"
-            push=true
+            mode=publish
+            tag="$IMAGE_TAG"
             skip="$ALREADY_PUBLISHED"
             test -n "$RELEASE_TAG"
-            test -n "$base_version"
-            test "$(node -p "require('./package.json').version")" = "$base_version"
+            test "$(node -p "require('./package.json').version")" = "$BASE_VERSION"
           fi
-
           {
-            echo "base_version=$base_version"
-            echo "image_tag=$image_tag"
-            echo "fork_version=$fork_version"
-            echo "push=$push"
-            echo "skip=$skip"
-            echo "revision=$(git rev-parse HEAD)"
+            echo "mode=$mode"
+            echo "ref=$revision"
+            echo "tag=$tag"
             echo "release_tag=$RELEASE_TAG"
+            echo "skip=$skip"
           } >> "$GITHUB_OUTPUT"
 
-      # The two role images are one release: both are built, pushed and verified
-      # under the same exact tag before either `latest` moves and before the fork
-      # Git tag exists. They build sequentially; each runs a full Expo export.
-      - name: Build daemon image
-        if: steps.values.outputs.skip != 'true'
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/base/Dockerfile
-          platforms: linux/amd64
-          build-args: |
-            PASEO_VERSION=${{ steps.values.outputs.base_version }}
-            PASEO_FORK_VERSION=${{ steps.values.outputs.fork_version }}
-            EXPO_PUBLIC_PASEO_SELFHOSTED=false
-            EXPO_PUBLIC_LOCAL_DAEMON=self-hosted
-          tags: ${{ env.IMAGE }}:${{ steps.values.outputs.image_tag }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          push: false
-          load: ${{ steps.values.outputs.push == 'true' }}
-          provenance: false
-          cache-from: type=gha,scope=paseo-fork
-          cache-to: type=gha,scope=paseo-fork,mode=max
+  # Both role images are one release: mouriya-devops/ci builds them with
+  # `mise run build`, pushes both exact tags before either `latest` moves, and
+  # creates the `paseo` Deployment last.
+  image:
+    needs: release
+    if: needs.release.outputs.skip != 'true'
+    permissions:
+      contents: read
+      deployments: write
+    uses: mouriya-devops/ci/.github/workflows/image.yml@main
+    with:
+      # `cachyos` exists only on the edge Incus pool (CachyOS laptop, 30 GiB).
+      # The resident VM 181 LXD runners share 4 GiB, which OOM-kills
+      # `expo export` (paseo#20, pve-vctcn#300).
+      runs-on: '["self-hosted","linux","vctcn","netbird","x64","cachyos"]'
+      ref: ${{ needs.release.outputs.ref }}
+      mode: ${{ needs.release.outputs.mode }}
+      images: |
+        registry.237575.xyz/paseo/paseo
+        registry.237575.xyz/paseo/paseo-web
+      tag: ${{ needs.release.outputs.tag }}
+      channel: ${{ needs.release.outputs.mode == 'publish' && 'latest' || '' }}
+      deployment-environment: ${{ needs.release.outputs.mode == 'publish' && 'paseo' || '' }}
+    secrets:
+      KEYCLOAK_REGISTRY_CLIENT_SECRET: ${{ secrets.KEYCLOAK_REGISTRY_CLIENT_SECRET }}
 
-      - name: Build web image
-        if: steps.values.outputs.skip != 'true'
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: fork-features/web-image/Dockerfile
-          platforms: linux/amd64
-          build-args: |
-            PASEO_VERSION=${{ steps.values.outputs.base_version }}
-            PASEO_FORK_VERSION=${{ steps.values.outputs.fork_version }}
-            PASEO_REVISION=${{ steps.values.outputs.revision }}
-          tags: ${{ env.WEB_IMAGE }}:${{ steps.values.outputs.image_tag }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          push: false
-          load: ${{ steps.values.outputs.push == 'true' }}
-          provenance: false
-          cache-from: type=gha,scope=paseo-fork-web
-          cache-to: type=gha,scope=paseo-fork-web,mode=max
-
-      - name: Record that both images built
-        id: built
-        if: steps.values.outputs.skip != 'true'
-        run: echo "built=true" >> "$GITHUB_OUTPUT"
-
-      # Log in only after both builds: the Keycloak token is the Docker password
-      # and lives 30 minutes (pve-vctcn apps/registry). Fetched before two Expo
-      # builds, it expired during the second image's push (run 37431893121).
-      - name: Fetch registry token
-        id: registry-token
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        uses: mouriya-devops/keycloak-token-action@v1
-        with:
-          keycloak-url: https://keycloak.237575.xyz
-          realm: registry
-          client-id: registry
-          client-secret: ${{ secrets.KEYCLOAK_REGISTRY_CLIENT_SECRET }}
-
-      - name: Log in to private registry
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        run: echo "${{ steps.registry-token.outputs.access-token }}" | docker login "$REGISTRY" -u sa-registry --password-stdin
-
-      # Push from the runner's Docker daemon: registry-mesh-hosts.sh writes the
-      # registry mesh override into the runner instance's /etc/hosts. BuildKit's
-      # builder container instead resolves the public IP via embedded DNS; the
-      # resident runner on OVH cannot hairpin to it.
-      # GARM self-hosted runners use resident LXD on VM 181 or edge Incus on the
-      # operator's laptop; mesh reachability comes from that host's NetBird peer.
-      # See https://github.com/mouriya-devops/pve-vctcn/blob/main/apps/runner/README.md#边缘-incus-providergarm-edge-incus
-      - name: Push exact tags to private registry
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        env:
-          IMAGE_TAG: ${{ steps.values.outputs.image_tag }}
-        run: |
-          set -euo pipefail
-          for image in "$IMAGE" "$WEB_IMAGE"; do
-            docker push "$image:$IMAGE_TAG"
-          done
-
-      - name: Verify published exact tags
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        env:
-          IMAGE_TAG: ${{ steps.values.outputs.image_tag }}
-        run: |
-          set -euo pipefail
-          for image in "$IMAGE" "$WEB_IMAGE"; do
-            docker pull "$image:$IMAGE_TAG"
-            test "$(docker image inspect "$image:$IMAGE_TAG" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$GITHUB_SHA"
-          done
-
-      # Every release, stable or prerelease, moves `latest`: it is the channel
-      # the homelab `paseo` Stack runs, so the deploy job below needs no pin.
-      - name: Move latest tags
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        env:
-          IMAGE_TAG: ${{ steps.values.outputs.image_tag }}
-        run: |
-          set -euo pipefail
-          for image in "$IMAGE" "$WEB_IMAGE"; do
-            docker tag "$image:$IMAGE_TAG" "$image:latest"
-            docker push "$image:latest"
-            docker pull "$image:latest"
-            test "$(docker image inspect "$image:$IMAGE_TAG" --format '{{.Id}}')" = "$(docker image inspect "$image:latest" --format '{{.Id}}')"
-          done
-
-      - name: Tag the published fork commit
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        env:
-          RELEASE_TAG: ${{ steps.values.outputs.release_tag }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "$RELEASE_TAG" "$GITHUB_SHA"
-          git push origin "refs/tags/$RELEASE_TAG"
-
-      - name: Record the publication
-        id: published
-        if: steps.values.outputs.push == 'true' && steps.values.outputs.skip != 'true'
-        run: echo "published=true" >> "$GITHUB_OUTPUT"
-
-  # Publish an intent only after both `latest` images are ready. homelab-apps
-  # owns the deployment hook and app-only Procedure; this source repo needs no
-  # Core credentials or mesh access (paseo#54).
-  deploy:
-    needs: docker
-    if: >-
-      !inputs.ref && github.ref == 'refs/heads/main' &&
-      (needs.docker.outputs.published == 'true' || github.event_name == 'workflow_dispatch')
+  # The fork tag marks the commit as published, so it is created only after
+  # the images and the Deployment exist; a failed publication leaves no tag
+  # and the next run publishes the same release again.
+  tag:
+    needs: [release, image]
+    if: needs.image.outputs.published == 'true'
     runs-on: ubuntu-latest
     permissions:
-      deployments: write
-    env:
-      APP_URL: https://paseo.237575.xyz
+      contents: write
     steps:
-      - name: Create GitHub Deployment
+      # GitHub rejects a GITHUB_TOKEN push of a new tag whose commit changes a
+      # workflow file (run 43024478600: "refusing to allow a GitHub App to
+      # create or update workflow ... without `workflows` permission"). The
+      # sync PAT already pushes upstream workflow changes to main.
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.ref }}
+          token: ${{ secrets.SYNC_PAT }}
+
+      - name: Tag the published fork commit
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_API_URL: ${{ github.api_url }}
+          RELEASE_TAG: ${{ needs.release.outputs.release_tag }}
+          REVISION: ${{ needs.release.outputs.ref }}
         run: |
           set -euo pipefail
-          payload=$(jq -nc --arg ref "$GITHUB_SHA" \
-            '{ref:$ref,environment:"paseo",auto_merge:false,required_contexts:[]}')
-          response=$(curl --silent --show-error --fail-with-body \
-            -X POST "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/deployments" \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'Content-Type: application/json' \
-            -d "$payload")
-          deployment_id=$(jq -er '.id' <<<"$response")
-          echo "GitHub Deployment $deployment_id for $GITHUB_SHA"
+          existing="$(git ls-remote origin "refs/tags/$RELEASE_TAG^{}" "refs/tags/$RELEASE_TAG" | awk 'END { print $1 }')"
+          if [[ "$existing" == "$REVISION" ]]; then
+            echo "$RELEASE_TAG already points to $REVISION"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$RELEASE_TAG" "$REVISION"
+          git push origin "refs/tags/$RELEASE_TAG"
 
       # The web image serves its build revision; the public App must report
-      # the commit this run published (or, on dispatch, the current release).
+      # the commit this run published.
       - name: Verify the App serves this release
+        env:
+          REVISION: ${{ needs.release.outputs.ref }}
         run: |
           set -euo pipefail
           for attempt in $(seq 1 24); do
             served=$(curl -fsS "${APP_URL}/_paseo/version.json?run=${GITHUB_RUN_ID}-${attempt}" | jq -r '.revision' || true)
-            if [[ "$served" == "$GITHUB_SHA" ]]; then
+            if [[ "$served" == "$REVISION" ]]; then
               echo "App serves revision $served"
               exit 0
             fi
             sleep 5
           done
-          echo "::error::App serves revision '${served}', expected ${GITHUB_SHA}"
+          echo "::error::App serves revision '${served}', expected ${REVISION}"
           exit 1

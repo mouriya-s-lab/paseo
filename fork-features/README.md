@@ -28,20 +28,25 @@ It builds no npm, Desktop, Android/iOS/EAS, Nix, website, relay, or GitHub
 Release artifacts, and upstream's release workflows and skills are deleted.
 
 [`.github/workflows/fork-docker.yml`](../.github/workflows/fork-docker.yml) is
-the only release workflow. It runs on the GARM edge runner on the CachyOS laptop
-(`runs-on` includes `cachyos`, which only the edge pool carries): the resident
-VM 181 runners share 4 GiB and `expo export --platform web` is OOM-killed there.
-The label is owned by `mouriya-devops/pve-vctcn` `apps/runner`.
+the only release workflow. It decides what a run builds and hands the build and
+publication to the shared `image` workflow of
+[`mouriya-devops/ci`](https://github.com/mouriya-devops/ci), which runs the
+`build` task of the root [`mise.toml`](../mise.toml) (`mise run build` builds
+both images locally) on the GARM edge runner on the CachyOS laptop (`runs-on`
+includes `cachyos`, which only the edge pool carries): the resident VM 181
+runners share 4 GiB and `expo export --platform web` is OOM-killed there. The
+label is owned by `mouriya-devops/pve-vctcn` `apps/runner`.
 
 - A same-repository pull request builds both images without pushing.
 - A push to `main`, the hourly schedule, and a manual dispatch on `main` publish
   the current fork release.
 - Pull requests from other repositories never run on the mesh runner.
 
-Both images build sequentially in one job. Both exact tags are pushed and their
-revision labels verified before either `latest` moves, and the Git tag is
-created last, so a failed build or push leaves no release tag and a retry
-publishes the whole pair.
+Both images build sequentially in one job, labelled with the commit they were
+built from. Both exact tags are pushed and their revision labels verified before
+either `latest` moves, the `paseo` Deployment follows, and the Git tag is
+created last, so a failed build, push or Deployment leaves no release tag and a
+retry publishes the whole pair.
 
 ### Versions
 
@@ -79,26 +84,24 @@ The homelab Komodo Stack `paseo`, declared in `mouriya-s-lab/homelab-apps`
 `stacks/paseo/compose.yaml`, runs both images as `latest`. That repository
 holds no version, so a release reaches the App without a commit there.
 
-After a run publishes, the `deploy` job of `fork-docker.yml` creates a GitHub
-Deployment for environment `paseo`, with the run's commit SHA, `auto_merge=false`
-and no required contexts. It uses only the job's `GITHUB_TOKEN` with
-`deployments: write` and runs on a GitHub-hosted runner without mesh access.
-Each Deployment asks the `deploy-paseo` Procedure in `mouriya-s-lab/homelab-apps`
+A publication ends with a GitHub Deployment for environment `paseo` at the
+published commit, created by the shared `image` workflow with the run's
+`GITHUB_TOKEN` (`deployments: write`). Each Deployment asks the `deploy-paseo`
+Procedure in `mouriya-s-lab/homelab-apps`
 to execute `DeployStack` for service `paseo`. That Stack uses `--force-recreate`
 because single-file bind mounts need recreation to rebind (see the
 [homelab-apps README](https://github.com/mouriya-s-lab/homelab-apps/blob/main/README.md)).
 The App container is recreated even when its image is unchanged; the other
 services in the Stack are not touched.
 
-The job then waits for `https://paseo.237575.xyz/_paseo/version.json` to report
-the run's commit. The web image writes that file at build time from
-`PASEO_REVISION`. A Deployment records the request; the public revision check
-confirms its result.
+After tagging, the `tag` job waits for
+`https://paseo.237575.xyz/_paseo/version.json` to report the published commit.
+The web image writes that file at build time from `PASEO_REVISION`. A
+Deployment records the request; the public revision check confirms its result.
 
-- Redeploy the current release: dispatch the workflow on `main`. The docker
-  job finds the commit already published and skips; `deploy` still runs.
-- Retry a failed Deployment: redeliver its original GitHub webhook delivery.
-  Re-running the `deploy` job creates another Deployment.
+Redeploy the current release, or retry a failed rollout, by redelivering the
+original GitHub webhook delivery of its Deployment. A dispatch or scheduled run
+on a commit that is already published builds nothing and creates no Deployment.
 
 This source repository holds no Komodo credentials. The workload repository
 owns the hook's secret and rollout scope. Pull requests, sync build-only calls,

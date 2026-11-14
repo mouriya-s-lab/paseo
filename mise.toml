@@ -1,0 +1,75 @@
+# Fork-owned (fork-features/ownership.tsv). Upstream's toolchain and Android
+# environment stay in .tool-versions and .mise.toml; mise merges this file
+# with them.
+
+[tasks.build]
+description = "Build the daemon and web role images as <repository>:$CI_IMAGE_TAG for every repository in $CI_IMAGES"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+revision=${CI_REVISION:-$(git rev-parse HEAD)}
+tag=${CI_IMAGE_TAG:-build-${revision:0:12}}
+images=${CI_IMAGES:-$'registry.237575.xyz/paseo/paseo\nregistry.237575.xyz/paseo/paseo-web'}
+# A publish tag is <base>-fork.N: both Dockerfiles assert that the base equals
+# package.json and inline the fork tag for Settings → About.
+if [ "${CI_MODE:-build-only}" = publish ]; then
+  base_version=${tag%-fork.*}
+  fork_version=$tag
+else
+  base_version=$(node -p "require('./package.json').version")
+  fork_version=
+fi
+
+# The edge runner image ships Docker without the buildx plugin; install the
+# latest release for this user when it is missing.
+if ! docker buildx version >/dev/null 2>&1; then
+  case "$(uname -m)" in
+    x86_64) arch=amd64 ;;
+    aarch64) arch=arm64 ;;
+    *) echo "no buildx build for $(uname -m)" >&2; exit 1 ;;
+  esac
+  latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/docker/buildx/releases/latest)
+  version=${latest##*/}
+  plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
+  mkdir -p "$plugins"
+  curl -fsSL -o "$plugins/docker-buildx" \
+    "https://github.com/docker/buildx/releases/download/$version/buildx-$version.linux-$arch"
+  chmod +x "$plugins/docker-buildx"
+  docker buildx version
+fi
+docker buildx inspect paseo-fork >/dev/null 2>&1 \
+  || docker buildx create --name paseo-fork --driver docker-container >/dev/null
+
+# The two roles build sequentially; each runs a full Expo export.
+while IFS= read -r image; do
+  [ -n "$image" ] || continue
+  case "$image" in
+    */paseo)
+      file=docker/base/Dockerfile scope=paseo-fork
+      args=(--build-arg EXPO_PUBLIC_PASEO_SELFHOSTED=false --build-arg EXPO_PUBLIC_LOCAL_DAEMON=self-hosted)
+      ;;
+    */paseo-web)
+      file=fork-features/web-image/Dockerfile scope=paseo-fork-web
+      args=(--build-arg PASEO_REVISION="$revision")
+      ;;
+    *)
+      echo "no role builds $image" >&2
+      exit 1
+      ;;
+  esac
+  cache=()
+  if [ -n "${ACTIONS_RUNTIME_TOKEN:-}" ]; then
+    cache=(--cache-from "type=gha,scope=$scope" --cache-to "type=gha,scope=$scope,mode=max")
+  fi
+  docker buildx build --builder paseo-fork --load --platform linux/amd64 --provenance=false \
+    --file "$file" \
+    --build-arg PASEO_VERSION="$base_version" \
+    --build-arg PASEO_FORK_VERSION="$fork_version" \
+    "${args[@]}" \
+    --label org.opencontainers.image.source=https://github.com/mouriya-s-lab/paseo \
+    --label org.opencontainers.image.revision="$revision" \
+    ${cache[@]+"${cache[@]}"} \
+    --tag "$image:$tag" \
+    .
+done <<<"$images"
+'''
