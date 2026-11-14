@@ -12,6 +12,7 @@ on:
       - "patches/**"
       - "scripts/**"
       - "fork-features/**"
+      - "mise.toml"
       - "tsconfig*.json"
       - "packages/**"
   push:

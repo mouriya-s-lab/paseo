@@ -20,6 +20,23 @@ else
   fork_version=
 fi
 
+# The edge runner image ships Docker without the buildx plugin; install the
+# latest release for this user when it is missing.
+if ! docker buildx version >/dev/null 2>&1; then
+  case "$(uname -m)" in
+    x86_64) arch=amd64 ;;
+    aarch64) arch=arm64 ;;
+    *) echo "no buildx build for $(uname -m)" >&2; exit 1 ;;
+  esac
+  latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/docker/buildx/releases/latest)
+  version=${latest##*/}
+  plugins="${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins"
+  mkdir -p "$plugins"
+  curl -fsSL -o "$plugins/docker-buildx" \
+    "https://github.com/docker/buildx/releases/download/$version/buildx-$version.linux-$arch"
+  chmod +x "$plugins/docker-buildx"
+  docker buildx version
+fi
 docker buildx inspect paseo-fork >/dev/null 2>&1 \
   || docker buildx create --name paseo-fork --driver docker-container >/dev/null
 
