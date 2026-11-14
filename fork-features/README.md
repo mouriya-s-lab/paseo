@@ -99,8 +99,8 @@ After tagging, the `tag` job waits for
 The web image writes that file at build time from `PASEO_REVISION`. A
 Deployment records the request; the public revision check confirms its result.
 
-Redeploy the current release, or retry a failed rollout, by redelivering the
-original GitHub webhook delivery of its Deployment. A dispatch or scheduled run
+To roll out the current release again, or to retry a failed rollout, redeliver
+the original GitHub webhook delivery of its Deployment. A dispatch or scheduled run
 on a commit that is already published builds nothing and creates no Deployment.
 
 This source repository holds no Komodo credentials. The workload repository
