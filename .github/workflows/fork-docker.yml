@@ -162,10 +162,15 @@ jobs:
     permissions:
       contents: write
     steps:
+      # GitHub rejects a GITHUB_TOKEN push of a new tag whose commit changes a
+      # workflow file (run 43024478600: "refusing to allow a GitHub App to
+      # create or update workflow ... without `workflows` permission"). The
+      # sync PAT already pushes upstream workflow changes to main.
       - name: Check out source
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.release.outputs.ref }}
+          token: ${{ secrets.SYNC_PAT }}
 
       - name: Tag the published fork commit
         env:
