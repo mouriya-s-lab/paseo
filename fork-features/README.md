@@ -32,15 +32,12 @@ the only release workflow. It decides what a run builds and hands the build and
 publication to the shared `image` workflow of
 [`mouriya-devops/ci`](https://github.com/mouriya-devops/ci), which runs the
 `build` task of the root [`mise.toml`](../mise.toml) (`mise run build` builds
-both images locally) on the GARM edge runner on the CachyOS laptop (`runs-on`
-includes `cachyos`, which only the edge pool carries): the resident VM 181
-runners share 4 GiB and `expo export --platform web` is OOM-killed there. The
-label is owned by `mouriya-devops/pve-vctcn` `apps/runner`.
+both images locally) on a GitHub-hosted runner.
 
 - A same-repository pull request builds both images without pushing.
 - A push to `main`, the hourly schedule, and a manual dispatch on `main` publish
   the current fork release.
-- Pull requests from other repositories never run on the mesh runner.
+- Pull requests from other repositories are not built.
 
 Both images build sequentially in one job, labelled with the commit they were
 built from. Both exact tags are pushed and their revision labels verified before
