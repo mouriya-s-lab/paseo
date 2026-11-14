@@ -9,7 +9,7 @@ run = '''
 set -euo pipefail
 revision=${CI_REVISION:-$(git rev-parse HEAD)}
 tag=${CI_IMAGE_TAG:-build-${revision:0:12}}
-images=${CI_IMAGES:-$'registry.237575.xyz/paseo/paseo\nregistry.237575.xyz/paseo/paseo-web'}
+images=${CI_IMAGES:-$'ghcr.io/mouriya-s-lab/paseo\nghcr.io/mouriya-s-lab/paseo-web'}
 # A publish tag is <base>-fork.N: both Dockerfiles assert that the base equals
 # package.json and inline the fork tag for Settings → About.
 if [ "${CI_MODE:-build-only}" = publish ]; then

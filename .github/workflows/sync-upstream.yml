@@ -124,10 +124,12 @@ jobs:
     needs: plan
     if: needs.plan.outputs.outcome == 'full' || needs.plan.outputs.outcome == 'prefix'
     # The callee's jobs may request at most these. Its image job declares
-    # `deployments: write` for main publications; build-only never uses it.
+    # `deployments: write` and `packages: write` for main publications;
+    # build-only never uses them.
     permissions:
       contents: write
       deployments: write
+      packages: write
     uses: ./.github/workflows/fork-docker.yml
     with:
       ref: ${{ needs.plan.outputs.merge_commit }}

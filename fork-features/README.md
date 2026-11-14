@@ -18,9 +18,9 @@ upstream file.
 The fork publishes two Docker images, one per role of the split deployment,
 always as a pair under the same tag:
 
-- `registry.237575.xyz/paseo/paseo` — the daemon, from
+- `ghcr.io/mouriya-s-lab/paseo` — the daemon, from
   [`docker/base/Dockerfile`](../docker/base/Dockerfile).
-- `registry.237575.xyz/paseo/paseo-web` — the web origin, from
+- `ghcr.io/mouriya-s-lab/paseo-web` — the web origin, from
   [`web-image/Dockerfile`](web-image/Dockerfile). See
   [Split web/daemon deployment](#split-webdaemon-deployment).
 
